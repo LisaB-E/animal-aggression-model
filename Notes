@@ -1,0 +1,26 @@
+=================================================================
+                     model discussion points
+=================================================================
+
+ 1.  Order of things... multiple feeding events - doesn't make sense 
+    keep habitat the same  in each
+    change to binary - food resource or not, clumped vs not, feeding only when succesfyl comp
+    
+ 2.  Option to not move - even if not habitat related?
+    move in four directions - completely random
+    read up on edge stuff more
+ 3. Intra vs inter?
+    comp is random across everyone
+    transient vs intransient
+ 4. 
+
+sensitivity - clumped, to, evenly spaced habitat? Point process.  edge movements.
+
+on their own - full access
+other individual - share resource proportionally to number. or maybe all get one? resoucre limoited vs not? plus random allocation.
+read more for IBM3 - optimal foraging theory vs gamne theory? changing strategies?
+
+REMEMBER - giraffes. if we generate a model after theory, what would happen? emergent properties at scale
+
+list of comp/aggresion
+given this theory ating on indiv scale, ability to scale up to community levels
