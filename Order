@@ -1,0 +1,10 @@
+order for general model
+
+1. Initiate habitat - binary #so that habitat is the same for entire model... generations
+
+For loop 1 - repeat for each replicate
+  2. Move
+  3. Fight
+  4. Feed, eneregy, die - depends on 3
+  5. Reproduce - depends on 3 & 4
+End FL1

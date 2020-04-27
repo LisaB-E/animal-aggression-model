@@ -5,12 +5,14 @@
 #' output: github_document
 #' ---
 #'
+#'primer of ecology (in R)- -elli
 
-#' - 1. Initiate habitat - binary #so that habitat is the same for entire model...
+#' - **1. Initiate habitat - binary** 
+#' * outside loop so that habitat is the same for entire model...*
 #' For loop 1 - repeat for each replicate
 #' -  2. Move
-#' -  3. Fight
-#' -  4. Feed
+#' -  3. Fight - dependent o energy
+#' -  4. Feed - 
 #' -  5. Reproduce
 #' -  6. Energy gain/loss
 #' End FL1 
@@ -31,7 +33,7 @@ load.pack
 #' # 2. Parametres
 #' =======================================================================
 
-#' ## IBM Parameters *should include constraints on each parametre*
+#' ## IBM Parameters *should include constraints on each parametre* #double check how many are needed in reduced model
 ngenerations  = 10    # No. generations
 replicates    = 10    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
@@ -47,10 +49,15 @@ b             = 100
 v             = 0.08  # Logistic mortality parameters
 a_rep         = 0.4   # Asymptotic reproduction probability
 offspring_pen = 2     # factor by which to scale offspring energy
+repro_pen     = 20    # energy loss from reproduction
 diff_ag       = 0.05  # Differential aggression \in [0,0.5)
 
-#' Potential one time-step movement. Can move to any adjecent cell (inc diagonal) 
-step_moves = c(-1,dim-1,dim,dim+1,1,-dim+1,-dim,-dim-1)      #what about optuion to stay put?
+#' Potential one time-step movement. Can move to any adjacent cell (inc diagonal) 
+step_moves = c(0,-1,dim-1,dim,dim+1,1,-dim+1,-dim,-dim-1)      #added option to stay in the same place
+
+#' Potential aggression matrix - M1 assume all species have equal competitive potential - so outcome will only depend on energy levels
+aggression = matrix(0.5, ncol=nspecies, nrow = nspecies)
+diag(aggression) = 0.5 # For interaction between individuals of the same species 
 
 #' Store species richness at each generation
 rich = data.frame(gen=rep(1:ngenerations,replicates),
@@ -64,43 +71,26 @@ pb = progress_bar$new(total=100, width=100, clear=F)
 #' =======================================================================
 #' #3a. Function - habitat
 #' ======================================================================= 
-
+# WORKING IN ISOLATION
 #' ## 0. Initiate habitat and individuals --------------------------------
 init_habitat <- function(){
   
-  # Simulate spatially autocorrelated habitat 
+  # Simulate habitat 
   hab_grid = expand.grid(1:dim, 1:dim)                                     # The habitat arena
   names(hab_grid) = c('x','y')
-  # Generates objects that hold all the information necessary for univariate or multivariate geostatistical prediction
-  hab_mod = gstat(formula=z~1,                                             # Ordinary & simple krigin 
-                  locations=~x+y,                                          
-                  dummy=T,                                                 # if TRUE, consider this data as a dummy variable (only necessary for unconditional simulation)
-                  beta=0,                                                  # Expected value of Gaussian field
-                  model=vgm(psill=0.025,model="Exp",range=30),             # Range controls autocorrelation
-                  nmax=20)                                                 # the number of nearest observations that should be used for a kriging prediction or simulation  
-  
-  hab_pred = predict(hab_mod, newdata=hab_grid, nsim=1)                    # predicts habitat value from model
-  
-  #' Normalise to 0-1
-  hab_pred$sim1 = hab_pred$sim1 - min(hab_pred$sim1)
-  hab_pred$sim1 = hab_pred$sim1/max(hab_pred$sim1)
+  hab_bin = sample(x=c(1,0), size = hab_dim, replace = T)                  # samples binary habitat values
+  hab_bin = cbind(hab_grid, hab_bin)
   
   #' Make matrix
-  hab_vals = as.matrix(cast(hab_pred,
+  hab_vals = as.matrix(cast(hab_bin,
                             x~y,
-                            value='sim1'))
+                            value='hab_bin'))
   
   #' ## Plot habitat values
-  hab.plot = ggplot(hab_pred) + theme_bw() +
-    geom_raster(aes(x,y,fill=sim1)) +
+  hab.plot = ggplot(hab_bin) + theme_bw() +
+    geom_raster(aes(x,y,fill=hab_bin)) +
     scale_x_continuous(expand=expand_scale(add=0)) +
     scale_y_continuous(expand=expand_scale(add=0)) +
-    scale_fill_viridis(option='A',
-                       name='Habitat values',
-                       breaks = c(0,0.5,1),
-                       guide=guide_colorbar(barheight = 0.5,
-                                            barwidth = 10,
-                                            ticks=F)) +
     theme(legend.position = 'top',
           axis.text=element_blank(),
           axis.title = element_blank(),
@@ -125,26 +115,14 @@ init_habitat <- function(){
   #' Sort by location
   locs = locs[order(locs[,1]),] 
   
-  return(locs)
-}
-
-#' =======================================================================
-#' #3b. Function - Feed, energy loss, die
-#' =======================================================================
-
-die <- function(locs){
-  locs[,4] = locs[,4]-eloss+locs[,3]*100;                               # -energy from one step, + energy from habitat (feed) #order??
-  locs[locs[,4]>100,4] = 100                                            # make sure does not exceed 100
-  mort = as.logical(rbinom(dim(locs)[1],1,a/(1+b*exp(-v*locs[,4]))))    # Death = Bernoulli trial w probability logistically dependent on current energy
-  locs = locs[mort,]                                                    # removes individuals from `locs` picked in `mort`
-  return(locs)
+  return(locs, habitat)
 }
 
 #' =======================================================================
 #' #3b. Function - move
 #' =======================================================================
-
-move <- function(locs, hab_vals){      
+#WORKS IN ISOLATION + HABITAT
+move <- function(locs){      
   edge_corner <- unique(c(1:dim,                                       # top row
                           which(1:hab_dim%%dim%in%0:1),                 # sides
                           (hab_dim-dim+1):hab_dim))                     # bottom
@@ -243,26 +221,9 @@ move <- function(locs, hab_vals){
   # ------------------------------------- move -------------------------------------
   rownames(ec_indiv_new) = NULL
   
-  
   locs_new = rbind(offec_indiv,ec_indiv_new)
   locs_new = locs_new[order(locs_new[,1]),]
   colnames(locs_new)[5]="move"
-  
-  #Habitat value of proposed new cell
-  locs_new = cbind(locs_new,hab_vals[locs_new[,1]+locs_new[,5]])
-  colnames(locs_new)[6]="new_habVal"
-  
-  #Move probabilistically dependent upon the relative resource values of
-  #current and possible new cells
-  movers = locs_new[locs_new[,5]!=0,]                                   # separate 
-  non_movers = locs_new[locs_new[,5]==0,]                               # currently no non moving option in model
-  
-  move_vals = cbind(movers[,3],movers[,6])                                # V1 old hab val, V2 new hab_val
-  rel_move_val = move_vals/rowSums(move_vals)                             # prop of both??
-  movers[runif(dim(movers)[1])<=rel_move_val[,1],5] = 0                   # introduce non-movers in LQ hab?
-  
-  locs_new = rbind(movers,non_movers)
-  locs_new = locs_new[order(locs_new[,1]),]
   
   #Move
   locs_new[,1] = locs_new[,1] + locs_new[,5]                              # add move to cell value
@@ -270,21 +231,23 @@ move <- function(locs, hab_vals){
   locs_new = locs_new[order(locs_new[,1]),]  
   
   return(locs_new)                                                        # Should now be merged with `locs`? but then all subsequent locs_new will need to be changed
+  #here might be a good place to add a loop recording position for each timestep so we can simulate their movement over time?
 }
 
+#' =======================================================================
+#' #3b. Function - fight
+#' =======================================================================
 
-#' =======================================================================
-#' #3c. Function - fight
-#' =======================================================================
+#WORKS & minimised - not read for params
 
 fight <- function(locs_new){
   
   #Interacting species are those occupying the same cell -----------------
   
   loc_ind <- locs_new[,1]                                              # extracts cell locations
-  int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                       # extracts values for fighters from locs_new
-  
+  #should be an option here to avoid fight if eneregy low?
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]  # Remove fighters from set of individuals 
   
@@ -292,7 +255,7 @@ fight <- function(locs_new){
   all_winners = NULL
   
   for(i in unique(fighters[,1])){
-    sp_in_cell = fighters[fighters[,1]==i,]                              # extracts info about only fighting species
+    sp_in_cell = fighters[fighters[,1]==i,]                              # extracts info about only fighting species in this loop
     sp_ids = sp_in_cell[,2]                                              # extracts species number
     nosp = length(sp_ids)                                               
     win_vect = rep(0,nosp)                                               # creates vector for the number of fighting species 
@@ -342,50 +305,58 @@ fight <- function(locs_new){
   }
   fighters = cbind(fighters,all_winners)                               # merges 
   
-  #Lose energy, feed, die ----------------------------------------
+  #Lose energy
   
   winners = fighters[fighters[,7]==1,]                                   # Differentiate winners and losers 
   losers = fighters[fighters[,7]==0,]
   
-  ### Loss energy, consume, die
-  #Losers only loss energy and die
-  losers[,4] = losers[,4]-eloss                                          # subtracts `eloss` from e_level 
   losers = losers[losers[,4]>0,]                                         # deletes dead individuals (energy =0)
-  mort = as.logical(rbinom(dim(losers)[1],1,a/(1+b*exp(-v*losers[,4])))) # randomly selects some of remianing indivuals to die
-  losers = losers[mort,]                                                 # deletes those individs
-  
+
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
   locs_new = rbind(locs_new,winners)
   locs_new = locs_new[order(locs_new[,1]),]
   
-  #These individuals lose energy, consume, die and reproduce
-  locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*100                     # current energy= before energy - energy loss (~aging?) + energy gain (feeding)
-  locs_new[locs_new[,4]>100,4] = 100                                     # reset energy above 100 to 100
-  locs_new = locs_new[locs_new[,4]>0,]                                   # deletes individs with energy 0
-  mort = as.logical(rbinom(dim(locs_new)[1],1,a/(1+b*exp(-v*locs_new[,4])))) # randomly selects some of remaining indivuals to die
-  locs_new = locs_new[mort,]
+    return(locs, locs_new)
+}
+
   
-  #Low-energy individuals (I sound like Trump!) are unlikely to reproduce.
-  locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/(1+b*exp(-v*locs_new[,4])))) # Reproduction is Bernouilli trial dependent on current energy levels. 
-  offspring = locs_new[locs_new[,8]==1,]                                 # extracts offspring details (same as parent)
-  offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents to account for lower chance of survival
-  
-  locs = rbind(locs_new[,1:4],offspring[,1:4],losers[,1:4])              # merges output with new locs
-  locs = locs[order(locs[,1]),]
-  
-  habitat = matrix(0,ncol=dim,nrow=dim)                                  # creates new habitat matrix
-  habitat[locs[,1]] = 1                                                  # with individuals based on locations in `locs`
-  
+
+#' =======================================================================
+#' #3c. Function - Feed, energy loss, die
+#' =======================================================================
+
+die <- function(locs){
+  locs[,4] = locs[,4]-eloss+locs[,3]*100;                               # -energy from one step, + energy from habitat (feed) #order??
+  locs[locs[,4]>100,4] = 100                                            # make sure does not exceed 100
+  mort = as.logical(rbinom(dim(locs)[1],1,a/(1+b*exp(-v*locs[,4]))))    # Death = Bernoulli trial w probability logistically dependent on current energy
+  locs = locs[mort,]                                                    # removes individuals from `locs` picked in `mort`
   return(locs)
 }
 
+#' =======================================================================
+#' #3d. Reproduce
+#' =======================================================================
 
+reproduce <- function(locs){
+
+#Low-energy individuals (I sound like Trump!) are unlikely to reproduce.
+locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/(1+b*exp(-v*locs_new[,4])))) # Reproduction is Bernouilli trial dependent on current energy levels. 
+offspring = locs_new[locs_new[,8]==1,]                                 # extracts offspring details (same as parent)
+offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents to account for lower chance of survival
+
+locs_new[,4] <- ifelse(locs_new[,8]==1,                                # if reproducing
+                       locs_new[,4]-repro_pen,                         # remove energy
+                       locs_new[,4])                                   # non-breeders no change
+
+locs = rbind(locs_new[,1:4],offspring[,1:4],losers[,1:4])              # merges output with new locs
+locs = locs[order(locs[,1]),]
+return(locs)
+}
 
 #' =======================================================================
 #' #4 Simulate
 #' =======================================================================
-#' 
 
 
 loop = 0
@@ -560,5 +531,26 @@ if(intransitive){
 }
 
 
+#deleted from aggresion function
+mort = as.logical(rbinom(dim(losers)[1],1,a/(1+b*exp(-v*losers[,4])))) # randomly selects some of remianing indivuals to die
+losers = losers[mort,]                                                 # deletes those individs
 
 
+
+#These individuals lose energy, consume, die and reproduce
+locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*100                     # current energy= before energy - energy loss (~aging?) + energy gain (feeding)
+locs_new[locs_new[,4]>100,4] = 100                                     # reset energy above 100 to 100
+locs_new = locs_new[locs_new[,4]>0,]                                   # deletes individs with energy 0
+mort = as.logical(rbinom(dim(locs_new)[1],1,a/(1+b*exp(-v*locs_new[,4])))) # randomly selects some of remaining indivuals to die
+locs_new = locs_new[mort,]
+
+#Low-energy individuals (I sound like Trump!) are unlikely to reproduce.
+locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/(1+b*exp(-v*locs_new[,4])))) # Reproduction is Bernouilli trial dependent on current energy levels. 
+offspring = locs_new[locs_new[,8]==1,]                                 # extracts offspring details (same as parent)
+offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents to account for lower chance of survival
+
+locs = rbind(locs_new[,1:4],offspring[,1:4],losers[,1:4])              # merges output with new locs
+locs = locs[order(locs[,1]),]
+
+habitat = matrix(0,ncol=dim,nrow=dim)                                  # creates new habitat matrix
+habitat[locs[,1]] = 1                                                  # with individuals based on locations in `locs`

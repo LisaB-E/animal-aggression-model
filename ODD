@@ -45,3 +45,17 @@
 #' - Initialization
 #' - Input
 #' - Submodels
+
+
+
+
+#' *********************************************************************  
+#' ## Assumptions M1 - general model running notes
+#' *********************************************************************  
+
+1 - habitat is binary and random
+2 - movement is random in all directions
+3 - all species have the same comp ability
+4 - pop is NOT food limited (consumption does not change hab value)
+
+
