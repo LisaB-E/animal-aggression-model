@@ -1,0 +1,12 @@
+References:
+
+- overall ABM:
+  https://bradduthie.github.io/blog/individual-based-models-in-r/#move
+
+- progress bar:
+  https://www.rdocumentation.org/packages/progress/versions/1.2.2/topics/progress_bar
+  
+- animate movement:
+  https://terpconnect.umd.edu/~egurarie/teaching/MovementAtICCB2017/VisualizingData.html
+  
+  https://movevis.org
