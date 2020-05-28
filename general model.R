@@ -25,7 +25,8 @@ rm(list=ls())
 
 #' Load packages
 packages = c('reshape','gstat','ggplot2',
-             'viridis','tictoc', 'progress')
+             'viridis','tictoc', 'progress',
+             'dplyr', 'gganimate')
 load.pack = lapply(packages,require,char=T)
 load.pack
 
@@ -69,7 +70,9 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
 #' Progress bar  *use pb$tick() in for-loop to run*
 pb <- progress_bar$new(format = "Completed in [:elapsed]",
                        total=100, width=100, clear=F)
+#' unique ID's for each individual
 
+IDs <- c(1:(nspecies*nindiv*ngenerations))
 
 
 #' =======================================================================
@@ -112,7 +115,8 @@ pb <- progress_bar$new(format = "Completed in [:elapsed]",
   locs = cbind(locs,rep(100,nindiv))                                        # starting energetic value =100?
   locs = locs[order(locs[,1]),] 
  
-  locs <- cbind(locs, 1:nrow(locs))
+  locs <- cbind(locs, IDs[1:nrow(locs)])
+  IDs <- setdiff(IDs,locs[,5])
   colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
   
   #' Sort by location
@@ -140,7 +144,7 @@ move <- function(){
   
   
   ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]           # which edge corner cells are occupied
-  ec_indiv    <- locs[locs[,1]%in%ec_occ,]                             # which individuals are on edge corner cells (V2&V1)
+  ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                             # which individuals are on edge corner cells (V2&V1)
   offec_indiv <- locs[locs[,1]%in%setdiff(locs[,1],ec_indiv[,1]),]     # individuals  NOT on edge corner cells (V1&v2)
   
   offec_indiv <- cbind(offec_indiv, sample(step_moves, dim(offec_indiv)[1], replace = TRUE)) # add move step to non edge inds (V3)
@@ -269,8 +273,7 @@ move <- function(){
   temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
   locs_new <- cbind(locs_new, temp_coords)
   
-                                                                          # maybe a good time to remove some unnneccesary columns here?
-  return(locs_new)                                                        # Should now be merged with `locs`? but then all subsequent locs_new will need to be changed
+  return(locs_new)                                                        
   #here might be a good place to add a loop recording position for each timestep so we can simulate their movement over time?
 }
 
@@ -280,22 +283,21 @@ move <- function(){
 
 #WORKS & minimised - not read for params
 
-fight <- function(locs_new){
+fight <- function(){
   
   #Interacting species are those occupying the same cell -----------------
-  
-  loc_ind <- locs_new[,1]                                              # extracts cell locations
+  locs_new <- locs
+  loc_ind <- locs_new[,1]                                                  # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
-  fighters <- locs_new[locs_new[,1]%in%int_loc,]                       # extracts values for fighters from locs_new
-  #should be an option here to avoid fight if eneregy low?
+  fighters <- locs_new[locs_new[,1]%in%int_loc,]                               # extracts values for fighters
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
-  locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]  # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst!
+  locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix!
   
   #Roulette selection for winners ----------------------------------------
   all_winners = NULL
   
   for(i in unique(fighters[,1])){
-    sp_in_cell = fighters[fighters[,1]==i,]                              # extracts info about only fighting species in this loop
+    sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters
     sp_ids = sp_in_cell[,2]                                              # extracts species number
     nosp = length(sp_ids)                                               
     win_vect = rep(0,nosp)                                               # creates vector for the number of fighting species 
@@ -325,74 +327,69 @@ fight <- function(locs_new){
       
       rowcount = 0
       rowsum = 0
-      while(rowsum!=6){                                                  # Don't know where 6 comes from?
+      while(rowsum!=5){                                                  # 5=all columns matches with the loser
         rowcount = rowcount + 1
-        rowsum = sum(sp_in_cell[rowcount,] == loser)                     # identifies individ randomly allocated as loser
+        rowsum = sum(sp_in_cell[rowcount,] == loser)                     # checks whether top row = loser
       }
-      sp_in_cell = sp_in_cell[-rowcount,]                                # removes loser, then loops back for next fight
+      sp_in_cell = sp_in_cell[-rowcount,]                                # removes current row, then loops back for next fight
     }
     
     initial = fighters[fighters[,1]==i,]                                 # identifies next cell with multiple individs, extracts only their info 
     
     rowcount = 0
     rowsum = 0
-    while(rowsum!=6){                                                    # not sure...
+    while(rowsum!=5){                                                    
       rowcount = rowcount + 1
       rowsum = sum(initial[rowcount,] == sp_in_cell)
     }
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
     all_winners = c(all_winners,win_vect)
-  }
+  
+    } #runs
   fighters = cbind(fighters,all_winners)                               # merges 
   
   #Lose energy
+
+  winners = fighters[fighters[,6]==1, , drop=FALSE]                                   # Differentiate winners and losers 
+  losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
-  winners = fighters[fighters[,7]==1,]                                   # Differentiate winners and losers 
-  losers = fighters[fighters[,7]==0,]
-  
-  losers = losers[losers[,4]>0,]                                         # deletes dead individuals (energy =0)
+  losers = losers[losers[,4]>0, ,drop=FALSE]                                       # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
 
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
   locs_new = rbind(locs_new,winners)
   locs_new = locs_new[order(locs_new[,1]),]
   
-    return(locs, locs_new)
+  locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*100                     # winners -e from engaging? +e by feeding. Check whetehr this doesn't already occur up top?
+  locs_new[locs_new[,4]>100,4] = 100                                     # e > 100 = 100
+  locs_new = locs_new[locs_new[,4]>0,]                                   # e < 0 = dead
+  
+    #Death ----
+  mort = as.logical(rbinom(dim(locs_new)[1],1,a/
+                             (1+b*exp(-v*locs_new[,4]))))                # Death = Bernoulli trial w probability logistically dependent on current energy
+  locs_new = locs_new[mort,]
+  
+    #Reproduction ----
+  locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/
+                              (1+b*exp(-v*locs_new[,4]))))               # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
+  offspring = locs_new[locs_new[,7]==1, , drop=F]
+  offspring[,5] = IDs[1:nrow(offspring)]                                      # give unique ID
+  offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents 
+  
+  locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
+  locs_new = locs_new[order(locs_new[,1]),]
+  
+  # store data
+  gen <- rep(generation, nrow(locs_new))                                 # Store gen
+  locs_new <- cbind(locs_new, gen)  
+  
+    return(locs_new)
 }
 
   
 
-#' =======================================================================
-#' #3c. Function - Feed, energy loss, die
-#' =======================================================================
 
-die <- function(locs){
-  locs[,4] = locs[,4]-eloss+locs[,3]*100;                               # -energy from one step, + energy from habitat (feed) #order??
-  locs[locs[,4]>100,4] = 100                                            # make sure does not exceed 100
-  mort = as.logical(rbinom(dim(locs)[1],1,a/(1+b*exp(-v*locs[,4]))))    # Death = Bernoulli trial w probability logistically dependent on current energy
-  locs = locs[mort,]                                                    # removes individuals from `locs` picked in `mort`
-  return(locs)
-}
 
-#' =======================================================================
-#' #3d. Reproduce
-#' =======================================================================
-# Works and reduced
-reproduce <- function(locs){
-
-#Low-energy individuals (I sound like Trump!) are unlikely to reproduce.
-locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/(1+b*exp(-v*locs_new[,4])))) # Reproduction is Bernouilli trial dependent on current energy levels. 
-offspring = locs_new[locs_new[,8]==1,]                                 # extracts offspring details (same as parent)
-offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents to account for lower chance of survival
-
-locs_new[,4] <- ifelse(locs_new[,8]==1,                                # if reproducing
-                       locs_new[,4]-repro_pen,                         # remove energy
-                       locs_new[,4])                                   # non-breeders no change
-
-locs = rbind(locs_new[,1:4],offspring[,1:4],losers[,1:4])              # merges output with new locs
-locs = locs[order(locs[,1]),]
-return(locs)
-}
 
 #' =======================================================================
 #' #4 Simulate
@@ -402,146 +399,269 @@ return(locs)
 
 loop=0
 list_move=list()                              #list to store move info
+list_fight=list()
+list_abund=list()
+list_rich = list()
+
 for(generation in 1:ngenerations){
   loop = loop + 1
   #Progress bar update
   pb$tick()
-   ## 3. Move 
+   
+  ## Move 
   after_move <- move()                        # after_move = new_locs
-  locs = after_move[,1:5]                     # updates locs by end of each run - keeps giraffes fromw andering off the map!
-  
-  list_move[[generation]] <- after_move       # stores all moves per generation as list
-print(generation)
+  locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
+  list_move[[generation]] <- after_move       # stores moves per generation as list
 
-  ## X. Plot
+  ## Fight
+  after_fight <- fight()                      # after_fight = locs
+  locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep)
+  IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
   
+  rich <- length(unique(locs[,2]))            # No species
+  list_rich[[generation]] <- rich
+ 
+  locs.df <-data.frame(locs)                  # Abundance
+  locs.df$sp <- as.factor(locs.df$sp)
+  abund <- locs.df %>%
+    group_by(sp) %>%
+    tally() %>%
+    mutate(gen=generation);
+  list_abund[[generation]] <- abund           # stores abundance after fight per generation as list (move down)
+  
+  list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
+  
+   print(generation)                    
+
+   
 }
-
 progress_bar$finished
 
-#---- 6. VISUALISE ----
 
-# Movement
+
+
+
+#---- 6. VISUALISE ----
+#can get rid of U_ID?
+
+  # Movement ----
 move_hist <- data.frame(do.call(rbind,list_move))
+move_hist$sp <- paste("SP", move_hist$sp)
 move_hist$ID=as.factor(move_hist$ID)
 move_hist$U_ID <- paste(move_hist$sp, move_hist$ID, sep="_")
 
-random_select = sample(x=move_hist$U_ID,size=10)  #reduced set for plotting n=10 individs     
+random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs     
 sub_movers <- subset(move_hist, U_ID %in% c(random_select))
 
 movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
-  geom_raster(aes(fill=hab_bin), alpha=0.2) +
-  geom_point(data=sub_movers, aes(x=col, y=row, col=U_ID),size=2, inherit.aes = FALSE)+
-  geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
-  theme_bw()+
+  geom_raster(aes(fill=hab_bin), alpha=0.7) +
+  scale_fill_gradient( low="grey10", high="grey5") +
+  geom_point(data=move_hist, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
+  scale_colour_viridis(option="viridis", discrete = TRUE)+
+  geom_path(data=move_hist, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
+  ggtitle('Individual movement')+
+  theme_dark()+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(color = "grey20", size = 0.2),
+        panel.grid.minor = element_line(color = "grey20", size = 0.2),
+        axis.title = element_text(colour="grey30")
+            ) +
+  # theme_dark()+
   theme(legend.position="none")+
-  # labs(title = "Generation {previous_state} of 20" )+
+ # labs(title = "Generation {previous_state} of 20" )+
   coord_fixed()
+
 movement_fig
   
-# Animate
-library(gganimate)
-movement_animation <- movement_fig + 
-  transition_reveal(gen) +
-  labs(title = "Generation {as.integer(frame_along)} of 100")
-animate(movement_animation, end_pause = 3, width=800, height=800)
-anim_save(filename="move_anim.gif")
+# Sp. Abundance ----
+sp_hist <- data.frame(do.call(rbind,list_abund))
+sp_hist$sp <- paste("SP", sp_hist$sp)
 
-
-
-hab.plot = ggplot(hab_bin) + theme_bw() +
-  geom_raster(aes(x,y,fill=hab_bin)) +
-  scale_x_continuous(expand=expand_scale(add=0)) +
-  scale_y_continuous(expand=expand_scale(add=0)) +
-  theme(legend.position = 'top',
-        axis.text=element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank())
-hab.plot
-
-
-
-
-
-
-
-
-
-
-
-
-# all of it - copy pasted above
-  loop=0  
-  for(generation in 1:ngenerations){
-    loop = loop + 1
-    
-    #Progress bar update
-    pb$tick()
-    
-    ## 1. Move
-    #move_hist should probably be here eventually (somthing like this)
-    #move_hist[move_hist$gen==generation & move_hist$rep==reps,3]=locs_new$loc #stores locations from this generation (can prob be moved to simulation )
-    # move_hist[move_hist$gen==generation & move_hist$rep==reps,4]=move_hist$sp #stores species
-    
-    locs2 <- move(locs=locs, hab_vals=hab_vals)
-    
-    ## 2. Fight, feed, energy gain, loss, reproduce die
-    locs3 <- fight(locs_new = locs2, hab_vals=hab_vals)   
-    
-    ## 3. Feed, energy gain, energy loss, die (from energy loss) 
-    locs4 <- die(locs=locs)
-    
-    ## 4. Reproduce
-    locs5 <- reproduce(locs=locs)
+abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
+for (genx in 1:ngenerations) {
+  sub_abund_data <- subset(sp_hist, gen==genx)
+  sub_abund <- data.frame(gen = genx,
+                          meanX = mean(sub_abund_data$n),
+                          sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
+  abund_running <- rbind(abund_running, sub_abund)
   
-    ## 5. update sp richness
-    rich[rich$gen==generation & rich$rep==reps,3]=length(unique(locs[,2])) #updates species richness
-    rich[rich$gen==generation & rich$rep==reps,4]=intransitive
-    
-    close(pb)
-    
-    ## 6. plot & outputs
-    
-    labs = c('Intransitive','Transitive')
-    count = 0
-    for(type in c(T,F)){
-      count = count + 1
-      subData = rich[rich$type==type,]
-      
-      frame = data.frame(gen=1:ngenerations,
-                         mean=tapply(subData$rich,subData$gen,mean),
-                         se=tapply(subData$rich,subData$gen,function(x) sd(x)/sqrt(length(x))),
-                         type=labs[count])
-      
-      assign(labs[count],frame)
-      
-    }
-    
-    
-    allRich = rbind(Intransitive,Transitive)
-    
-    rich.plot = ggplot(allRich) + theme_bw() +
-      geom_ribbon(aes(x=gen,ymin=mean-se,ymax=mean+se,fill=type),alpha=0.8) +
-      scale_y_continuous(limits=c(0,nspecies)) +
-      labs(y='Species richness',x='Generation') +
-      scale_fill_manual(values=c("#35B779FF","#440154FF"),
-                        name='Aggression type',
-                        guide=guide_legend(keywidth = 1,
-                                           keyheight=0.5)) +
-      theme(legend.position='top',
-            panel.grid=element_line(size=0.2),
-            axis.title = element_text(size=8),
-            axis.text = element_text(size=7),
-            legend.title = element_text(size=8),
-            legend.text = element_text(size=7))
-    
-    cairo_pdf('aggression.pdf',width=5,height=5.2)
-    print(rich.plot)
-    dev.off()
-    
+}
+
+sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
+  geom_ribbon(data = abund_running, 
+              aes(x=gen, 
+                  ymin=meanX-sem, 
+                  ymax=meanX+sem), 
+              inherit.aes = FALSE)+
+  geom_line(data = abund_running,
+            aes(x=gen, 
+                y=meanX),
+            colour="black")+
+  
+  geom_line() +
+  ggtitle('Species abundance')+
+  ylab("Abundance (by species)")+
+  xlab("Generation")+
+  scale_colour_viridis(option="viridis", discrete = TRUE) +
+  theme_dark()+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text(family = "Arial")
+  ) +
+  theme(legend.position = "none") 
+  
+sp_fig
+
+# SAD ----------
+# (contd'd) from above
+# idea: animate this thorugh time using gganimate()
+SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
+SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
+                          n=0,
+                          gen=ngenerations)
+SAD_data <- rbind(SAD_data, SAD_missing)
+
+SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
+  geom_histogram(aes(y=..density..),binwidth = 5)+
+  geom_density(colour="red")+
+  theme_dark()+
+  ggtitle('Species abundance distribution')+
+  ylab("Number of species")+
+  xlab("Abundance")+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous( expand=c(0,0)) +
+  scale_x_continuous( expand=c(0,0))
+SAD_fig
+
+# Sp. Diversity ----
+sp_div <-  data.frame()                                          # Calculating no.sp in each generation
+for (genX in 1:ngenerations) {
+  gen_div <- data.frame(gen=genX, 
+  div=length(unique(subset(sp_hist, gen==genX))$sp))
+  sp_div=rbind(sp_div,gen_div)
   }
+
   
+div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
+  geom_line(colour = "#35B779") +
+  theme_dark()+
+  ggtitle('Species diversity')+
+  ylab("Number of species")+
+  xlab("Generation")+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text( family = "Arial")
+        )+
+  scale_y_continuous(limits = c(0, 22), expand=c(0,0)) +
+  scale_x_continuous(limits = c(0, 105), expand=c(0,0))
   
-  
-  
- 
+div_fig
+
+# Energy ----
+e_data <- move_hist %>%                                       # calculating mean/se e-level
+  group_by(gen, sp) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+
+e_trend <- move_hist %>%
+  group_by(gen) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+
+e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
+  geom_line()+
+  geom_ribbon(data= e_trend, 
+              aes(x=gen, 
+                  ymin=e_avg-e_sem, 
+                  ymax=e_avg+e_sem), 
+              alpha=0.7, 
+              inherit.aes = FALSE)+
+  geom_line( data = e_trend,
+             aes(x=gen,
+                 y=e_avg),
+             colour="black",
+             inherit.aes = FALSE)+
+  theme_dark()+
+  ggtitle('Energy levels (mean per species)')+
+  ylab("Energy")+
+  xlab("Generation")+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
+  scale_x_continuous(expand=c(0,0)) +
+  theme(legend.position = "none") 
+e_fig
+
+# Panel ----
+library(patchwork)
+history_panel <- div_fig | e_fig
+# history_panel <-  SAD_fig | div_fig 
+history_panel  <-   sp_fig / history_panel /SAD_fig + 
+plot_layout(heights = c(2,2,1)) +
+  plot_annotation(tag_levels = 'a')
+history_panel
+
+# Animate ----
+# movement_animation <- movement_fig + 
+#   transition_reveal(gen) +
+#   labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
+# move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
+# # anim_save(filename="move_anim.gif")
+# 
+# sp_abund_animation <- sp_fig + 
+#   transition_reveal(gen) 
+# abund_gif <- animate(movement_animation, end_pause = 3, width=400, height=400)
+# # anim_save(filename="move_anim.gif")
+# 
+# # stitch animations together
+# # read the first image (frame) of each animation
+# a <- image_read(p_dist_gif[[1]])
+# b <- image_read(p_ROC_gif[[1]])
+# c <- image_read(p_PR_gif[[1]])
+# # combine the two images into a single image
+# combined <- image_append(c(a, b, c))
+# new_gif <- c(combined)
+# for (i in 2:100) { # combine images frame by frame
+#   a <- image_read(p_dist_gif[[i]])
+#   b <- image_read(p_ROC_gif[[i]])
+#   c <- image_read(p_PR_gif[[i]])
+#   combined <- image_append(c(a, b, c))
+#   new_gif <- c(new_gif, combined)
+# }
+# 
+# # make an animation of the combined images
+# combined_gif <- image_animate(new_gif)
+# # save as gif
+# image_write(combined_gif, "../animations/imbalance3.gif")
+
+
+
+
+

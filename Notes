@@ -27,6 +27,16 @@ given this theory ating on indiv scale, ability to scale up to community levels
 
 
 NEW:
-
+Simulation:
 - why replicates? to be able to generate rror around oredictions withi each generation?
     - if so, should habitat be ew per each new replicate?
+
+Move:    
+- a single movement step per generation? is that realistic? does it matter?
+
+Fight: 
+- should be option to not fight when low energy?
+- losers do not feed? reproduce? Maybe better to let everythign be energy dependent? Rather than winner vs loser dependent?
+
+Reproduction:
+- offspring start in parent cell - wait does that then trigger higher risk for competition?!
