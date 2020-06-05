@@ -40,7 +40,7 @@ ngenerations  = 100    # No. generations
 replicates    = 10    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
-nspecies      = 20    # No. species
+nspecies      = 100    # No. species
 nindiv        = 20    # No. individuals per species
 tot_indiv     = nspecies*nindiv # Total individuals
 eloss         = 30    # Time-step energy loss
@@ -130,7 +130,7 @@ IDs <- c(1:(nspecies*nindiv*ngenerations))
 #' =======================================================================
 #' #3b. Function - move
 #' =======================================================================
-#WORKS IN ISOLATION + HABITAT
+
 move <- function(){      
   
   #---- Place individuals in habitat ----
@@ -249,8 +249,9 @@ move <- function(){
   locs_new[,3] = hab_vals[locs_new[,1]]                                   # get hab vals for new cells
   locs_new = locs_new[order(locs_new[,1]),]  
   
-  gen <- rep(generation, nrow(locs_new))                                  # output cleanup
-  locs_new <- cbind(locs_new, gen)                                        # add generation number
+  gen <- rep(generation, nrow(locs_new))                                  # output cleanup #WARNING!!!, change back to generation and repl
+  repl <- rep(replic, nrow(locs_new)) 
+  locs_new <- cbind(locs_new, gen, repl)                                        # add generation number V6, repl V7
  
   #---- getting x & y coords for animation ----
   temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                            # make 100 x 100 matrix
@@ -274,7 +275,7 @@ move <- function(){
   locs_new <- cbind(locs_new, temp_coords)
   
   return(locs_new)                                                        
-  #here might be a good place to add a loop recording position for each timestep so we can simulate their movement over time?
+  
 }
 
 #' =======================================================================
@@ -286,7 +287,7 @@ move <- function(){
 fight <- function(){
   
   #Interacting species are those occupying the same cell -----------------
-  locs_new <- locs
+  locs_new <- locs                                                    # ok, bcs locs_new updated in simul
   loc_ind <- locs_new[,1]                                                  # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                               # extracts values for fighters
@@ -373,22 +374,19 @@ fight <- function(){
   locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/
                               (1+b*exp(-v*locs_new[,4]))))               # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
   offspring = locs_new[locs_new[,7]==1, , drop=F]
-  offspring[,5] = IDs[1:nrow(offspring)]                                      # give unique ID
+  offspring[,5] = IDs[1:nrow(offspring)]                                 # give unique ID
   offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents 
   
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
   
   # store data
-  gen <- rep(generation, nrow(locs_new))                                 # Store gen
-  locs_new <- cbind(locs_new, gen)  
+  gen <- rep(generation, nrow(locs_new))                                 # Store gen (WARNING - change 1 to generation, replic)
+  repl <- rep(replic, nrow(locs_new))
+  locs_new <- cbind(locs_new, gen,repl)  
   
     return(locs_new)
 }
-
-  
-
-
 
 
 #' =======================================================================
@@ -398,15 +396,19 @@ fight <- function(){
 #---- 5. SIMULATE ----
 
 loop=0
+reps=0
 list_move=list()                              #list to store move info
 list_fight=list()
 list_abund=list()
 list_rich = list()
 
+for (replic in 1:replicates) {
+reps = reps + 1  
+#Progress bar update
+pb$tick()
 for(generation in 1:ngenerations){
   loop = loop + 1
-  #Progress bar update
-  pb$tick()
+  
    
   ## Move 
   after_move <- move()                        # after_move = new_locs
@@ -414,7 +416,7 @@ for(generation in 1:ngenerations){
   list_move[[generation]] <- after_move       # stores moves per generation as list
 
   ## Fight
-  after_fight <- fight()                      # after_fight = locs
+  after_fight <- fight()                      # after_fight = locs_new
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep)
   IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
   
@@ -432,10 +434,10 @@ for(generation in 1:ngenerations){
   list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
   
    print(generation)                    
+   }                                          # end gen
+print(replic)
+}                                             # end rep
 
-   
-}
-progress_bar$finished
 
 
 
@@ -572,8 +574,8 @@ div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
         axis.line = element_line(colour = "grey30"),
         axis.text = element_text( family = "Arial")
         )+
-  scale_y_continuous(limits = c(0, 22), expand=c(0,0)) +
-  scale_x_continuous(limits = c(0, 105), expand=c(0,0))
+  scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
+  scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
   
 div_fig
 
@@ -621,10 +623,12 @@ e_fig
 
 # Panel ----
 library(patchwork)
-history_panel <- div_fig | e_fig
-# history_panel <-  SAD_fig | div_fig 
-history_panel  <-   sp_fig / history_panel /SAD_fig + 
-plot_layout(heights = c(2,2,1)) +
+
+history_panel  <-   ((sp_fig | SAD_fig +
+                        plot_layout(c(2,1))) 
+                     /(div_fig | e_fig) +
+                       plot_layout(widths = c(1,1))) +
+  plot_layout(heights =  c(2,1) ) +
   plot_annotation(tag_levels = 'a')
 history_panel
 
