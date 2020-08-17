@@ -285,13 +285,13 @@ move <- function(){
 #WORKS & minimised - not read for params
 
 fight <- function(){
-  
-  #Interacting species are those occupying the same cell -----------------
-  locs_new <- locs                                                    # ok, bcs locs_new updated in simul
+  locs_new <- locs       #Interacting species are those occupying the same cell                                             # ok, bcs locs_new updated in simul
   loc_ind <- locs_new[,1]                                                  # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                               # extracts values for fighters
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
+  
+    
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix!
   
   #Roulette selection for winners ----------------------------------------
@@ -307,7 +307,10 @@ fight <- function(){
     #Losers removed until one individual remains 
     for(j in 1:(nosp-1)){
       fightj = sp_in_cell[sample(1:dim(sp_in_cell)[1],2),]               # extracts out rows of two random individs in same cell
-      
+       if (sum(fightj[,4]>0)!=2){                                         # weak inds lose first
+        loser = fightj[fightj[,4] < 0]
+        } else {
+        
       aggress_vals = c(aggression[fightj[1,2],fightj[2,2]],              # extracts out aggression level based on species number
                        aggression[fightj[2,2],fightj[1,2]])              # depending on which is x,y location in aggresion matrix? don't understand this matrix...
       
@@ -333,15 +336,16 @@ fight <- function(){
         rowsum = sum(sp_in_cell[rowcount,] == loser)                     # checks whether top row = loser
       }
       sp_in_cell = sp_in_cell[-rowcount,]                                # removes current row, then loops back for next fight
+        }
     }
     
     initial = fighters[fighters[,1]==i,]                                 # identifies next cell with multiple individs, extracts only their info 
     
-    rowcount = 0
+    rowcount = 2
     rowsum = 0
     while(rowsum!=5){                                                    
       rowcount = rowcount + 1
-      rowsum = sum(initial[rowcount,] == sp_in_cell)
+      rowsum = sum(initial[2,] == sp_in_cell) ### PROBLEM IS HERE SOMEWHERE, THE SUM ISN'T WIRKING PROPERLY... GAAAHHH!!
     }
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
     all_winners = c(all_winners,win_vect)
@@ -359,6 +363,7 @@ fight <- function(){
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
   locs_new = rbind(locs_new,winners)
+  
   locs_new = locs_new[order(locs_new[,1]),]
   
   locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*100                     # winners -e from engaging? +e by feeding. Check whetehr this doesn't already occur up top?
@@ -386,7 +391,9 @@ fight <- function(){
   locs_new <- cbind(locs_new, gen,repl)  
   
     return(locs_new)
-}
+  
+  }
+ 
 
 
 #' =======================================================================
