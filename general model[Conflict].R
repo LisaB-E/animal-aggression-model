@@ -21,7 +21,6 @@
 #' # 1. Workspace preparation 
 #' =======================================================================
 
-#---- 1. WORKSPACE PREP ----
 rm(list=ls()) 
 
 #' Load packages
@@ -31,7 +30,6 @@ packages = c('reshape','gstat','ggplot2',
 load.pack = lapply(packages,require,char=T)
 load.pack
 
-#+ echo = F
 #' =======================================================================
 #' # 2. Parametres
 #' =======================================================================
@@ -70,10 +68,8 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
                   type=NA)
 
 #' Progress bar  *use pb$tick() in for-loop to run*
-
-pb <- txtProgressBar(min = 0, max = 100, style = 3)
-#OLD  VERSION pb <- progress_bar$new(format = "Completed in [:elapsed]",
-                      # total=100, width=100, clear=F)
+pb <- progress_bar$new(format = "Completed in [:elapsed]",
+                       total=100, width=100, clear=F)
 #' unique ID's for each individual
 
 IDs <- c(1:(nspecies*nindiv*ngenerations))
@@ -296,24 +292,27 @@ fight <- function(){
   loc_ind <- locs_new[,1]                                                  # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                               # extracts values for fighters
-  locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
-  
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER??
- 
+  
+    
+  locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix!
+  
   #Roulette selection for winners ----------------------------------------
   all_winners = NULL
- 
+  
   for(i in unique(fighters[,1])){
-    sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters in same cell
-    win_vect = rep(0,length(sp_in_cell[,2]))                             # creates vector for the number of fighting indiviuals in cell
+    sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters
+    sp_ids = sp_in_cell[,2]                                              # extracts species number
+    nosp = length(sp_ids)                                               
+    win_vect = rep(0,nosp)                                               # creates vector for the number of fighting species 
     
-    #' *new problem starts here*
+    
     #Fights occur in random pairs -------------------------------------------
-    while(nrow(sp_in_cell)>1) {                                      #Losers removed until one individual remains 
+    #Losers removed until one individual remains 
+    for(j in 1:(nosp-1)){
       fightj = sp_in_cell[sample(1:dim(sp_in_cell)[1],2),]               # extracts out rows of two random individs in same cell
        if (sum(fightj[,4]>0)!=2){                                        # dead (e<0) inds lose straight away
-          low_e_loser <- fightj[fightj[,4] <= 0,,drop = F]
-          sp_in_cell <- sp_in_cell[!sp_in_cell[,5] %in% low_e_loser[,5],,drop=F]
+        loser = fightj[fightj[,4] <= 0,]
         } else {
         
       aggress_vals = c(aggression[fightj[1,2],fightj[2,2]],              # extracts out aggression level based on species number
@@ -329,38 +328,35 @@ fight <- function(){
       # sum, so =1 ??
       
       if(out_prob[1]>runif(1)){                                          # roulette? runif() determines win vs lose? Why involve the aggression values and energy levels if then outcome is ultimately determined by randomly generated number?
-        loser = fightj[2,,drop=F]
+        loser = fightj[2,]
       }else{
-        loser = fightj[1,,drop=F]
+        loser = fightj[1,]
       }
-       
+        }
       # remove loser from cell
-      
       rowcount = 0
       rowsum = 0
-                                                          
-      while(rowsum!=5){                                                 # 5 = all cells matches with the loser
-        rowcount = rowcount+1
-        rowsum = sum(sp_in_cell[rowcount,] == loser)                            # checks whether top row = loser
+      while(rowsum!=5){                                                  # 5=all columns matches with the loser
+        rowcount = rowcount + 1
+        rowsum = sum(sp_in_cell[rowcount,] == loser)                     # checks whether top row = loser
       }
-       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                                # removes loser from sp in cell
-      }      
-      }                                                                 # loops back to next fightJ
+      sp_in_cell = sp_in_cell[-rowcount,]                                # removes current row, then loops back for next fight until sp_in_cell only has one remaining individal
+        
+    }
     
     initial = fighters[fighters[,1]==i,]                                 # identifies starting individs in cell (.ie OG sp_in_cell)
    
      # identify which individ is winner to add to win_vect tally
-   if(nrow(sp_in_cell)>0) {                                              # if all were low energy
-     rowcount = 0
+    rowcount = 0
     rowsum = 0
     while(rowsum!=5){                                 
       rowcount = rowcount + 1
-      rowsum = sum(initial[rowcount,] == sp_in_cell)                    # finds winner in sp_in_cell
+      rowsum = sum(initial[rowcount,] == sp_in_cell) ### PROBLEM IS HERE SOMEWHERE, THE SUM ISN'T WIRKING PROPERLY... GAAAHHH!! the logic doesn't match the two up - is it because sp_in_cell is actually 2d, and not 1d like loser is? keep digging!! is it because sp_in_cell has multiple individuals remianing? should only have one if for lopp has worked??
     }
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
-   }
     all_winners = c(all_winners,win_vect)
-    }                                                                   #loops back to next cell with multiples
+  
+    } #runs
   fighters = cbind(fighters,all_winners)                               # merges 
   
   #Lose energy
@@ -403,7 +399,7 @@ fight <- function(){
     return(locs_new)
   
   }
-
+ 
 
 
 #' =======================================================================
@@ -419,24 +415,21 @@ list_fight=list()
 list_abund=list()
 list_rich = list()
 
-#testing
-#replic=NULL
-
 for (replic in 1:replicates) {
 reps = reps + 1  
 #Progress bar update
-#setTxtProgressBar(pb,reps) #might end up with progress bar for reps only, need combination of reps and generations. let's see if it works first huh...
-# old version pb$tick()
+pb$tick()
 for(generation in 1:ngenerations){
   loop = loop + 1
+  
+   
   ## Move 
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
   list_move[[generation]] <- after_move       # stores moves per generation as list
-print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
+
   ## Fight
   after_fight <- fight()                      # after_fight = locs_new
-  print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep)
   IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
   
@@ -453,11 +446,13 @@ print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
   list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
   
+   print(generation)                    
    }                                          # end gen
+print(replic)
 }                                             # end rep
 
 
-#' *CHECK ERROR MESSAGE!*
+
 
 
 
@@ -684,10 +679,6 @@ history_panel
 # image_write(combined_gif, "../animations/imbalance3.gif")
 
 
-
-To do:
-  
- # - add habitat values (dead, expensive, cheap)
 
 
 
