@@ -1,43 +1,40 @@
-#' ---
-#' title: “Angry animals - linking changes in aggression after habitat loss to demographic changes at the population level using IBM "
+spo#' ---
+#' title: “Angry fish - linking changes in aggression after habitat loss to demographic changes at the population level using IBM "
 #' author: “LBE"
 #' date: "`r format(Sys.time(), '%d %B, %Y')`"
 #' output: github_document
 #' ---
-#'
-#'primer of ecology (in R)- -elli
 
-#' - **1. Initiate habitat - binary** 
-#' * outside loop so that habitat is the same for entire model...*
-#' For loop 1 - repeat for each replicate
-#' -  2. Move
-#' -  3. Fight - dependent o energy
-#' -  4. Feed - 
-#' -  5. Reproduce
-#' -  6. Energy gain/loss
+#' ## Current structure  
+#' For loop 1 - repeat for each replicate  
+#' -  2. Move  
+#' -  3. Fight - dependent o energy  
+#' -  4. Feed -   
+#' -  5. Reproduce  
+#' -  6. Energy gain/loss  
 #' End FL1 
-#' 
-#' =======================================================================
-#' # 1. Workspace preparation 
-#' =======================================================================
+#'   
 
-#---- 1. WORKSPACE PREP ----
+#+ echo = F
+#---- 1. WORKSPACE PREP --------------------------------------------------  
+#' # 1. Workspace preparation 
+
 rm(list=ls()) 
 
+
 #' Load packages
+#+ packages, message=F, results='hide'
 packages = c('reshape','gstat','ggplot2',
              'viridis','tictoc', 'progress',
              'dplyr', 'gganimate')
 load.pack = lapply(packages,require,char=T)
 load.pack
 
-#+ echo = F
-#' =======================================================================
-#' # 2. Parametres
-#' =======================================================================
+#+ echo = F 
+#---- 2. PARAMETERS -----------------------------------------------------  
+#' # 2. Parameters  
 
-#---- 2. PARAMETRES -----
-#' ## IBM Parameters *should include constraints on each parametre* #double check how many are needed in reduced model
+#' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
 ngenerations  = 100    # No. generations
 replicates    = 10    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
@@ -71,33 +68,29 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
 
 #' Progress bar  *use pb$tick() in for-loop to run*
 
-pb <- txtProgressBar(min = 0, max = 100, style = 3)
-#OLD  VERSION pb <- progress_bar$new(format = "Completed in [:elapsed]",
-                      # total=100, width=100, clear=F)
-#' unique ID's for each individual
+pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
+pb_reps <- txtProgressBar(min = 0, max = replicates, style = 3)
+pb_gens <- txtProgressBar(min = 0, max = ngenerations, style = 3)
 
+#' unique ID's for each individual
 IDs <- c(1:(nspecies*nindiv*ngenerations))
 
+#+echo = F
+#---- 3. INITIALISE  ----------------------------------------------------
+#' # 3. Initialise - habitat  
 
-#' =======================================================================
-#' #3 Initialise - habitat
-#' ======================================================================= 
-# WORKING IN ISOLATION - has visual output
-
-#---- 3. INITIALISE  ----
-  
-  # Simulate habitat 
+#' Simulate habitat 
   hab_grid = expand.grid(1:dim, 1:dim)                                     # The habitat arena
   names(hab_grid) = c('x','y')
   hab_bin = sample(x=c(1,0), size = hab_dim, replace = T)                  # samples binary habitat values
   hab_bin = cbind(hab_grid, hab_bin)
   
-  #' Make matrix
+#' Make matrix
   hab_vals = as.matrix(cast(hab_bin,
                             x~y,
                             value='hab_bin'))
-  
-  #' ## Plot habitat values
+#+ habitat.matrix 
+#' ## Plot habitat values
   hab.plot = ggplot(hab_bin) + theme_bw() +
     geom_raster(aes(x,y,fill=hab_bin)) +
     scale_x_continuous(expand=expand_scale(add=0)) +
@@ -106,55 +99,46 @@ IDs <- c(1:(nspecies*nindiv*ngenerations))
           axis.text=element_blank(),
           axis.title = element_blank(),
           axis.ticks = element_blank())
-  hab.plot
+ hab.plot
   
-  #' 
-  #' Randomly place individuals of each species in habitat
-  #' 
-  
-  locs = cbind(sample(hab_dim,tot_indiv),rep(1:nspecies,each=nindiv))       # Randomly picks locations (V1-cell) for all individuals (V2) 
-  locs = cbind(locs,hab_vals[locs[,1]])                                     # habitat value
-  
-  #' add energetic value
-  locs = cbind(locs,rep(100,nindiv))                                        # starting energetic value =100?
-  locs = locs[order(locs[,1]),] 
- 
-  locs <- cbind(locs, IDs[1:nrow(locs)])
-  IDs <- setdiff(IDs,locs[,5])
-  colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
-  
-  #' Sort by location
- 
-  
-#   return(locs)
-#   return(habitat)
-# }
 
-  #----- 4. FUNCTIONS -----
-#' =======================================================================
-#' #3b. Function - move
-#' =======================================================================
+#' Randomly place individuals of each species in habitat
+locs = cbind(sample(hab_dim,tot_indiv),rep(1:nspecies,each=nindiv))       # Randomly picks locations (V1-cell) for all individuals (V2) 
+locs = cbind(locs,hab_vals[locs[,1]])                                     # habitat value
+
+#' add energetic value
+locs = cbind(locs,rep(100,nindiv))                                        # starting energetic value =100?
+locs = locs[order(locs[,1]),] 
+
+locs <- cbind(locs, IDs[1:nrow(locs)])
+IDs <- setdiff(IDs,locs[,5])
+colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
+
+#+ echo=F
+  #----- 4. FUNCTIONS ---------------------------------------------------------  
+#' # 4. Functions
+#' ### Function - move  
 
 move <- function(){      
   
-  #---- Place individuals in habitat ----
+  # Place individuals in habitat
   habitat = matrix(0,ncol=dim,nrow=dim)                                # make 100 x 100 matrix
   habitat[locs[,1]] = 1                                                # places individual in the matrix
   
-  #---- Find edge and corner individuals ----
+# Find edge and corner individuals
   edge_corner <- unique(c(1:dim,                                       # top row
                           which(1:hab_dim%%dim%in%0:1),                # sides
                           (hab_dim-dim+1):hab_dim))                    # bottom
   
   
-  ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]           # which edge corner cells are occupied
-  ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                             # which individuals are on edge corner cells (V2&V1)
+ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]          # which edge corner cells are occupied
+ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which individuals are on edge corner cells (V2&V1)
   offec_indiv <- locs[locs[,1]%in%setdiff(locs[,1],ec_indiv[,1]),]     # individuals  NOT on edge corner cells (V1&v2)
   
   offec_indiv <- cbind(offec_indiv, sample(step_moves, dim(offec_indiv)[1], replace = TRUE)) # add move step to non edge inds (V3)
   
-  #---- Move edge and corner individuals ----
-  # goal: figure out how to do this neater (not sure the if else statements are neede for samppling of the step_moves, surely a dim=1 woudl replace the if TRUE part?)
+# Move edge and corner individuals
+#goal: figure out how to do this neater (not sure the if else statements are neede for samppling of the step_moves, surely a dim=1 woudl replace the if TRUE part?)*
   
   ec_indiv_new <- NULL
   if(sum(ec_indiv[,1]==1)>0){                                         # Q1 find if any inds are in top left corner
@@ -177,7 +161,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,top_right_ind)
   }
-  if(sum(ec_indiv[,1] == dim)>0){              #bottom left
+  if(sum(ec_indiv[,1] == dim)>0){                                                     #bottom left
     bottom_left_ind = ec_indiv[ec_indiv[,1]==dim,]
     if(is.null(dim(bottom_left_ind))){
       bottom_left_ind = c(bottom_left_ind,sample(step_moves[c(1, 2:4)],1))
@@ -187,7 +171,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_left_ind)
   }
-  if(sum(ec_indiv[,1] == hab_dim)>0){           #bottom righ
+  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom righ
     bottom_right_ind = ec_indiv[ec_indiv[,1]==hab_dim,]
     if(is.null(dim(bottom_right_ind))){
       bottom_right_ind = c(bottom_right_ind,sample(step_moves[c(1:2,8:9)],1))
@@ -197,7 +181,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_right_ind)
   }
-  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){        #left edge
+  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              #left edge
     left_edge_ind = ec_indiv[ec_indiv[,1]%in%(2:(dim-1)),]
     if(is.null(dim(left_edge_ind))){
       left_edge_ind = c(left_edge_ind,sample(step_moves[c(1,2:6)],1))
@@ -207,7 +191,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,left_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){    #right edge
+  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             #right edge
     right_edge_ind = ec_indiv[ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)),]
     if(is.null(dim(right_edge_ind))){
       right_edge_ind = c(right_edge_ind,sample(step_moves[c(1:2,6:9)],1))
@@ -217,7 +201,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,right_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){ #top edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        #top edge
     top_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),
                                                     c(1,hab_dim-dim+1)),]
     if(is.null(dim(top_edge_ind))){
@@ -228,7 +212,7 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,top_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){ #bottom edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){                #bottom edge
     bottom_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),
                                                        c(dim,hab_dim)),]
     if(is.null(dim(bottom_edge_ind))){
@@ -239,77 +223,71 @@ move <- function(){
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_edge_ind)
     
-  }
+  }                                                                       #end find edge individs section
   
-  # ------------------------------------- move -------------------------------------
-  rownames(ec_indiv_new) = NULL
+# move 
+rownames(ec_indiv_new) = NULL
+
+locs_new = rbind(offec_indiv,ec_indiv_new)
+locs_new = locs_new[order(locs_new[,1]),]
+locs_new[6:7] <- as.numeric(locs_new[6:7])
+
+# Move
+locs_new[,1] = locs_new[,1] + locs_new[,6]                            # add move to cell value
+locs_new[,3] = hab_vals[locs_new[,1]]                                 # get hab vals for new cells
+locs_new = locs_new[order(locs_new[,1]),]  
+
+gen <- rep(generation, nrow(locs_new))                                # output cleanup 
+repl <- rep(replic, nrow(locs_new)) 
+locs_new <- cbind(locs_new, gen, repl)                               # add generation number V6, repl V7
+
+# Getting x & y coords for animation
+temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                          # make 100 x 100 matrix
+temp_habitat1[locs_new[,1]] = 1                                       # place inds on habitat, ignores later dupes
+temp_coords1 <- which(temp_habitat1>0, arr.ind=TRUE)                  # get x & y coords
+
+triple_threat_list <- list()                                          # get duplicates, including triples etc
+triple_threat_list <- NULL
+temp_dupes <- matrix(locs_new[,1][duplicated(locs_new[,1], fromLast = TRUE)])
   
-  locs_new = rbind(offec_indiv,ec_indiv_new)
-  locs_new = locs_new[order(locs_new[,1]),]
-  locs_new[6:7] <- as.numeric(locs_new[6:7])
-  
-  #Move
-  locs_new[,1] = locs_new[,1] + locs_new[,6]                              # add move to cell value
-  locs_new[,3] = hab_vals[locs_new[,1]]                                   # get hab vals for new cells
-  locs_new = locs_new[order(locs_new[,1]),]  
-  
-  gen <- rep(generation, nrow(locs_new))                                  # output cleanup #WARNING!!!, change back to generation and repl
-  repl <- rep(replic, nrow(locs_new)) 
-  locs_new <- cbind(locs_new, gen, repl)                                        # add generation number V6, repl V7
- 
-  #---- getting x & y coords for animation ----
-  temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                            # make 100 x 100 matrix
-  temp_habitat1[locs_new[,1]] = 1                                         # place inds on habitat, ignores later dupes
-  temp_coords1 <- which(temp_habitat1>0, arr.ind=TRUE)                    # get x & y coords
-  
-  triple_threat_list <- list()                                            # get duplicates, including triples etc
-  triple_threat_list <- NULL
-  temp_dupes <- matrix(locs_new[,1][duplicated(locs_new[,1], fromLast = TRUE)])
-  
-  for (dupe in 1:nrow(temp_dupes)) {
-    temp_habitat <- matrix(0,ncol=dim,nrow=dim)
-    temp_habitat[temp_dupes[dupe,1 ]] = 1
-    temp_coordsX <- which(temp_habitat>0, arr.ind=TRUE)
-    triple_threat_list[[dupe]] <- temp_coordsX
-  }
- 
-  temp_coords2 <- do.call(rbind,triple_threat_list)                        # extract each list
-  temp_coords <- rbind(temp_coords1, temp_coords2)                         # merge coords inclduing dupes
-  temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
-  locs_new <- cbind(locs_new, temp_coords)
-  
-  return(locs_new)                                                        
+for (dupe in 1:nrow(temp_dupes)) {
+  temp_habitat <- matrix(0,ncol=dim,nrow=dim)
+  temp_habitat[temp_dupes[dupe,1 ]] = 1
+  temp_coordsX <- which(temp_habitat>0, arr.ind=TRUE)
+  triple_threat_list[[dupe]] <- temp_coordsX
+}
+
+temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
+temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
+temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
+locs_new <- cbind(locs_new, temp_coords)
+
+return(locs_new)                                                        
   
 }
 
-#' =======================================================================
-#' #3b. Function - fight
-#' =======================================================================
+  
+#' ### Function - fight
 
-  
-  ## If testing! ##
-  # generation=1
-  # replic=1
-  
 fight <- function(){
-  locs_new <- locs       #Interacting species are those occupying the same cell                                             # ok, bcs locs_new updated in simul
-  loc_ind <- locs_new[,1]                                                  # extracts cell locations
-  int_loc <- loc_ind[duplicated(loc_ind)]                              # extracts duplicated values from new locations (ie where individuals meet)
-  fighters <- locs_new[locs_new[,1]%in%int_loc,]                               # extracts values for fighters
+  locs_new <- locs                                                        # Interacting species are those occupying the same cell 
+  loc_ind <- locs_new[,1]                                                 # extracts cell locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                                 # extracts duplicated values from new locations (ie where individuals meet)
+  fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
   
-  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER??
+  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
+  # *DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE IN  AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER??*
  
-  #Roulette selection for winners ----------------------------------------
+  # Roulette selection for winners
   all_winners = NULL
  
   for(i in unique(fighters[,1])){
     sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters in same cell
     win_vect = rep(0,length(sp_in_cell[,2]))                             # creates vector for the number of fighting indiviuals in cell
     
-    #' *new problem starts here*
-    #Fights occur in random pairs -------------------------------------------
-    while(nrow(sp_in_cell)>1) {                                      #Losers removed until one individual remains 
+# Fights occur in random pairs 
+    while(nrow(sp_in_cell)>1) {                                          # Losers removed until one individual remains 
       fightj = sp_in_cell[sample(1:dim(sp_in_cell)[1],2),]               # extracts out rows of two random individs in same cell
        if (sum(fightj[,4]>0)!=2){                                        # dead (e<0) inds lose straight away
           low_e_loser <- fightj[fightj[,4] <= 0,,drop = F]
@@ -334,22 +312,22 @@ fight <- function(){
         loser = fightj[1,,drop=F]
       }
        
-      # remove loser from cell
+# remove loser from cell
       
       rowcount = 0
       rowsum = 0
                                                           
       while(rowsum!=5){                                                 # 5 = all cells matches with the loser
         rowcount = rowcount+1
-        rowsum = sum(sp_in_cell[rowcount,] == loser)                            # checks whether top row = loser
+        rowsum = sum(sp_in_cell[rowcount,] == loser)                    # checks whether top row = loser
       }
-       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                                # removes loser from sp in cell
+       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                       # removes loser from sp in cell
       }      
       }                                                                 # loops back to next fightJ
     
-    initial = fighters[fighters[,1]==i,]                                 # identifies starting individs in cell (.ie OG sp_in_cell)
+    initial = fighters[fighters[,1]==i,]                                # identifies starting individs in cell (.ie OG sp_in_cell)
    
-     # identify which individ is winner to add to win_vect tally
+# identify which individ is winner to add to win_vect tally
    if(nrow(sp_in_cell)>0) {                                              # if all were low energy
      rowcount = 0
     rowsum = 0
@@ -363,8 +341,8 @@ fight <- function(){
     }                                                                   #loops back to next cell with multiples
   fighters = cbind(fighters,all_winners)                               # merges 
   
-  #Lose energy
-  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER??
+ # Lose energy
+  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
   winners = fighters[fighters[,6]==1, , drop=FALSE]                                   # Differentiate winners and losers 
   losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
@@ -380,12 +358,12 @@ fight <- function(){
   locs_new[locs_new[,4]>100,4] = 100                                     # e > 100 = 100
   locs_new = locs_new[locs_new[,4]>0,]                                   # e < 0 = dead
   
-    #Death ----
+# Death 
   mort = as.logical(rbinom(dim(locs_new)[1],1,a/
                              (1+b*exp(-v*locs_new[,4]))))                # Death = Bernoulli trial w probability logistically dependent on current energy
   locs_new = locs_new[mort,]
   
-    #Reproduction ----
+# Reproduction 
   locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/
                               (1+b*exp(-v*locs_new[,4]))))               # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
   offspring = locs_new[locs_new[,7]==1, , drop=F]
@@ -395,7 +373,7 @@ fight <- function(){
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
   
-  # store data
+ # store data
   gen <- rep(generation, nrow(locs_new))                                 # Store gen (WARNING - change 1 to generation, replic)
   repl <- rep(replic, nrow(locs_new))
   locs_new <- cbind(locs_new, gen,repl)  
@@ -404,39 +382,39 @@ fight <- function(){
   
   }
 
+  
 
-
-#' =======================================================================
-#' #4 Simulate
-#' =======================================================================
-
-#---- 5. SIMULATE ----
+#---- 5. SIMULATE -----------------------------------------------------------------  
+#' # 5. Simulate
 
 loop=0
 reps=0
-list_move=list()                              #list to store move info
+k=0
+list_move=list()                                                        # list to store move info
 list_fight=list()
 list_abund=list()
 list_rich = list()
 
-#testing
-#replic=NULL
-
 for (replic in 1:replicates) {
 reps = reps + 1  
 #Progress bar update
+
+#setTxtProgressBar(pb, replicates)
 #setTxtProgressBar(pb,reps) #might end up with progress bar for reps only, need combination of reps and generations. let's see if it works first huh...
 # old version pb$tick()
 for(generation in 1:ngenerations){
+  
   loop = loop + 1
-  ## Move 
+  
+# Move 
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
   list_move[[generation]] <- after_move       # stores moves per generation as list
-print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
-  ## Fight
+# print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
+  
+# Fight
   after_fight <- fight()                      # after_fight = locs_new
-  print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
+# print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep)
   IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
   
@@ -453,202 +431,203 @@ print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
   list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
   
+  setTxtProgressBar(pb, loop)
    }                                          # end gen
 }                                             # end rep
 
+close(pb)
+close(pb_gens)
 
-#' *CHECK ERROR MESSAGE!*
 
-
-
-#---- 6. VISUALISE ----
-#can get rid of U_ID?
-
-  # Movement ----
-move_hist <- data.frame(do.call(rbind,list_move))
-move_hist$sp <- paste("SP", move_hist$sp)
-move_hist$ID=as.factor(move_hist$ID)
-move_hist$U_ID <- paste(move_hist$sp, move_hist$ID, sep="_")
-
-random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs     
-sub_movers <- subset(move_hist, U_ID %in% c(random_select))
-
-movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
-  geom_raster(aes(fill=hab_bin), alpha=0.7) +
-  scale_fill_gradient( low="grey10", high="grey5") +
-  geom_point(data=move_hist, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
-  scale_colour_viridis(option="viridis", discrete = TRUE)+
-  geom_path(data=move_hist, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
-  ggtitle('Individual movement')+
-  theme_dark()+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(color = "grey20", size = 0.2),
-        panel.grid.minor = element_line(color = "grey20", size = 0.2),
-        axis.title = element_text(colour="grey30")
-            ) +
-  # theme_dark()+
-  theme(legend.position="none")+
- # labs(title = "Generation {previous_state} of 20" )+
-  coord_fixed()
-
-movement_fig
-  
-# Sp. Abundance ----
-sp_hist <- data.frame(do.call(rbind,list_abund))
-sp_hist$sp <- paste("SP", sp_hist$sp)
-
-abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
-for (genx in 1:ngenerations) {
-  sub_abund_data <- subset(sp_hist, gen==genx)
-  sub_abund <- data.frame(gen = genx,
-                          meanX = mean(sub_abund_data$n),
-                          sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
-  abund_running <- rbind(abund_running, sub_abund)
-  
-}
-
-sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
-  geom_ribbon(data = abund_running, 
-              aes(x=gen, 
-                  ymin=meanX-sem, 
-                  ymax=meanX+sem), 
-              inherit.aes = FALSE)+
-  geom_line(data = abund_running,
-            aes(x=gen, 
-                y=meanX),
-            colour="black")+
-  
-  geom_line() +
-  ggtitle('Species abundance')+
-  ylab("Abundance (by species)")+
-  xlab("Generation")+
-  scale_colour_viridis(option="viridis", discrete = TRUE) +
-  theme_dark()+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(colour=NA),
-        panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
-        axis.text = element_text(family = "Arial")
-  ) +
-  theme(legend.position = "none") 
-  
-sp_fig
-
-# SAD ----------
-# (contd'd) from above
-# idea: animate this thorugh time using gganimate()
-SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
-SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
-                          n=0,
-                          gen=ngenerations)
-SAD_data <- rbind(SAD_data, SAD_missing)
-
-SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
-  geom_histogram(aes(y=..density..),binwidth = 5)+
-  geom_density(colour="red")+
-  theme_dark()+
-  ggtitle('Species abundance distribution')+
-  ylab("Number of species")+
-  xlab("Abundance")+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(colour=NA),
-        panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
-        axis.text = element_text( family = "Arial")
-  )+
-  scale_y_continuous( expand=c(0,0)) +
-  scale_x_continuous( expand=c(0,0))
-SAD_fig
-
-# Sp. Diversity ----
-sp_div <-  data.frame()                                          # Calculating no.sp in each generation
-for (genX in 1:ngenerations) {
-  gen_div <- data.frame(gen=genX, 
-  div=length(unique(subset(sp_hist, gen==genX))$sp))
-  sp_div=rbind(sp_div,gen_div)
-  }
-
-  
-div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
-  geom_line(colour = "#35B779") +
-  theme_dark()+
-  ggtitle('Species diversity')+
-  ylab("Number of species")+
-  xlab("Generation")+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(colour=NA),
-        panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
-        axis.text = element_text( family = "Arial")
-        )+
-  scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
-  scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
-  
-div_fig
-
-# Energy ----
-e_data <- move_hist %>%                                       # calculating mean/se e-level
-  group_by(gen, sp) %>%
-  summarise(e_avg = mean(e_val),
-            e_sem = sd(e_val)/sqrt(length(e_val)))
-
-e_trend <- move_hist %>%
-  group_by(gen) %>%
-  summarise(e_avg = mean(e_val),
-            e_sem = sd(e_val)/sqrt(length(e_val)))
-
-e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
-  geom_line()+
-  geom_ribbon(data= e_trend, 
-              aes(x=gen, 
-                  ymin=e_avg-e_sem, 
-                  ymax=e_avg+e_sem), 
-              alpha=0.7, 
-              inherit.aes = FALSE)+
-  geom_line( data = e_trend,
-             aes(x=gen,
-                 y=e_avg),
-             colour="black",
-             inherit.aes = FALSE)+
-  theme_dark()+
-  ggtitle('Energy levels (mean per species)')+
-  ylab("Energy")+
-  xlab("Generation")+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(colour=NA),
-        panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
-        axis.text = element_text( family = "Arial")
-  )+
-  scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
-  scale_x_continuous(expand=c(0,0)) +
-  theme(legend.position = "none") 
-e_fig
-
-# Panel ----
-library(patchwork)
-
-history_panel  <-   ((sp_fig | SAD_fig +
-                        plot_layout(c(2,1))) 
-                     /(div_fig | e_fig) +
-                       plot_layout(widths = c(1,1))) +
-  plot_layout(heights =  c(2,1) ) +
-  plot_annotation(tag_levels = 'a')
-history_panel
+# 
+# #---- 6. VISUALISE ----
+# #can get rid of U_ID?
+# 
+#   # Movement ----
+# move_hist <- data.frame(do.call(rbind,list_move))
+# move_hist$sp <- paste("SP", move_hist$sp)
+# move_hist$ID=as.factor(move_hist$ID)
+# move_hist$U_ID <- paste(move_hist$sp, move_hist$ID, sep="_")
+# 
+# random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs     
+# sub_movers <- subset(move_hist, U_ID %in% c(random_select))
+# 
+# movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
+#   geom_raster(aes(fill=hab_bin), alpha=0.7) +
+#   scale_fill_gradient( low="grey10", high="grey5") +
+#   geom_point(data=move_hist, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
+#   scale_colour_viridis(option="viridis", discrete = TRUE)+
+#   geom_path(data=move_hist, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
+#   ggtitle('Individual movement')+
+#   theme_dark()+
+#   theme(title = element_text(colour = "white"),
+#         plot.background = element_rect(fill = "grey10"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_line(color = "grey20", size = 0.2),
+#         panel.grid.minor = element_line(color = "grey20", size = 0.2),
+#         axis.title = element_text(colour="grey30")
+#             ) +
+#   # theme_dark()+
+#   theme(legend.position="none")+
+#  # labs(title = "Generation {previous_state} of 20" )+
+#   coord_fixed()
+# 
+# movement_fig
+#   
+# # Sp. Abundance ----
+# sp_hist <- data.frame(do.call(rbind,list_abund))
+# sp_hist$sp <- paste("SP", sp_hist$sp)
+# 
+# abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
+# for (genx in 1:ngenerations) {
+#   sub_abund_data <- subset(sp_hist, gen==genx)
+#   sub_abund <- data.frame(gen = genx,
+#                           meanX = mean(sub_abund_data$n),
+#                           sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
+#   abund_running <- rbind(abund_running, sub_abund)
+#   
+# }
+# 
+# sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
+#   geom_ribbon(data = abund_running, 
+#               aes(x=gen, 
+#                   ymin=meanX-sem, 
+#                   ymax=meanX+sem), 
+#               inherit.aes = FALSE)+
+#   geom_line(data = abund_running,
+#             aes(x=gen, 
+#                 y=meanX),
+#             colour="black")+
+#   
+#   geom_line() +
+#   ggtitle('Species abundance')+
+#   ylab("Abundance (by species)")+
+#   xlab("Generation")+
+#   scale_colour_viridis(option="viridis", discrete = TRUE) +
+#   theme_dark()+
+#   theme(title = element_text(colour = "white"),
+#         plot.background = element_rect(fill = "grey10"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_line(colour=NA),
+#         panel.grid.minor = element_line(color =NA),
+#         axis.title = element_text(colour="white", family = "Arial"),
+#         axis.line = element_line(colour = "grey30"),
+#         axis.text = element_text(family = "Arial")
+#   ) +
+#   theme(legend.position = "none") 
+#   
+# sp_fig
+# 
+# # SAD ----------
+# # (contd'd) from above
+# # idea: animate this thorugh time using gganimate()
+# SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
+# SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
+#                           n=0,
+#                           gen=ngenerations)
+# SAD_data <- rbind(SAD_data, SAD_missing)
+# 
+# SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
+#   geom_histogram(aes(y=..density..),binwidth = 5)+
+#   geom_density(colour="red")+
+#   theme_dark()+
+#   ggtitle('Species abundance distribution')+
+#   ylab("Number of species")+
+#   xlab("Abundance")+
+#   theme(title = element_text(colour = "white"),
+#         plot.background = element_rect(fill = "grey10"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_line(colour=NA),
+#         panel.grid.minor = element_line(color =NA),
+#         axis.title = element_text(colour="white", family = "Arial"),
+#         axis.line = element_line(colour = "grey30"),
+#         axis.text = element_text( family = "Arial")
+#   )+
+#   scale_y_continuous( expand=c(0,0)) +
+#   scale_x_continuous( expand=c(0,0))
+# SAD_fig
+# 
+# # Sp. Diversity ----
+# sp_div <-  data.frame()                                          # Calculating no.sp in each generation
+# for (genX in 1:ngenerations) {
+#   gen_div <- data.frame(gen=genX, 
+#   div=length(unique(subset(sp_hist, gen==genX))$sp))
+#   sp_div=rbind(sp_div,gen_div)
+#   }
+# 
+#   
+# div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
+#   geom_line(colour = "#35B779") +
+#   theme_dark()+
+#   ggtitle('Species diversity')+
+#   ylab("Number of species")+
+#   xlab("Generation")+
+#   theme(title = element_text(colour = "white"),
+#         plot.background = element_rect(fill = "grey10"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_line(colour=NA),
+#         panel.grid.minor = element_line(color =NA),
+#         axis.title = element_text(colour="white", family = "Arial"),
+#         axis.line = element_line(colour = "grey30"),
+#         axis.text = element_text( family = "Arial")
+#         )+
+#   scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
+#   scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
+#   
+# div_fig
+# 
+# # Energy ----
+# e_data <- move_hist %>%                                       # calculating mean/se e-level
+#   group_by(gen, sp) %>%
+#   summarise(e_avg = mean(e_val),
+#             e_sem = sd(e_val)/sqrt(length(e_val)))
+# 
+# e_trend <- move_hist %>%
+#   group_by(gen) %>%
+#   summarise(e_avg = mean(e_val),
+#             e_sem = sd(e_val)/sqrt(length(e_val)))
+# 
+# e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
+#   geom_line()+
+#   geom_ribbon(data= e_trend, 
+#               aes(x=gen, 
+#                   ymin=e_avg-e_sem, 
+#                   ymax=e_avg+e_sem), 
+#               alpha=0.7, 
+#               inherit.aes = FALSE)+
+#   geom_line( data = e_trend,
+#              aes(x=gen,
+#                  y=e_avg),
+#              colour="black",
+#              inherit.aes = FALSE)+
+#   theme_dark()+
+#   ggtitle('Energy levels (mean per species)')+
+#   ylab("Energy")+
+#   xlab("Generation")+
+#   theme(title = element_text(colour = "white"),
+#         plot.background = element_rect(fill = "grey10"),
+#         panel.background = element_blank(),
+#         panel.grid.major = element_line(colour=NA),
+#         panel.grid.minor = element_line(color =NA),
+#         axis.title = element_text(colour="white", family = "Arial"),
+#         axis.line = element_line(colour = "grey30"),
+#         axis.text = element_text( family = "Arial")
+#   )+
+#   scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
+#   scale_x_continuous(expand=c(0,0)) +
+#   theme(legend.position = "none") 
+# e_fig
+# 
+# # Panel ----
+# library(patchwork)
+# 
+# history_panel  <-   ((sp_fig | SAD_fig +
+#                         plot_layout(c(2,1))) 
+#                      /(div_fig | e_fig) +
+#                        plot_layout(widths = c(1,1))) +
+#   plot_layout(heights =  c(2,1) ) +
+#   plot_annotation(tag_levels = 'a')
+# history_panel
 
 # Animate ----
 # movement_animation <- movement_fig + 
@@ -685,9 +664,6 @@ history_panel
 
 
 
-To do:
-  
- # - add habitat values (dead, expensive, cheap)
 
 
 
