@@ -1,4 +1,4 @@
-spo#' ---
+#' ---
 #' title: “Angry fish - linking changes in aggression after habitat loss to demographic changes at the population level using IBM "
 #' author: “LBE"
 #' date: "`r format(Sys.time(), '%d %B, %Y')`"
@@ -24,7 +24,7 @@ rm(list=ls())
 
 #' Load packages
 #+ packages, message=F, results='hide'
-packages = c('reshape','gstat','ggplot2',
+packages = c('tidyverse', 'reshape','gstat','ggplot2',
              'viridis','tictoc', 'progress',
              'dplyr', 'gganimate')
 load.pack = lapply(packages,require,char=T)
@@ -69,8 +69,6 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
 #' Progress bar  *use pb$tick() in for-loop to run*
 
 pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
-pb_reps <- txtProgressBar(min = 0, max = replicates, style = 3)
-pb_gens <- txtProgressBar(min = 0, max = ngenerations, style = 3)
 
 #' unique ID's for each individual
 IDs <- c(1:(nspecies*nindiv*ngenerations))
@@ -389,13 +387,13 @@ fight <- function(){
 
 loop=0
 reps=0
-k=0
 list_move=list()                                                        # list to store move info
 list_fight=list()
 list_abund=list()
 list_rich = list()
+move_hist = tibble()
 
-for (replic in 1:replicates) {
+for (replic in 1:replicates) { #need to reinitialise here!!
 reps = reps + 1  
 #Progress bar update
 
@@ -426,127 +424,135 @@ for(generation in 1:ngenerations){
   abund <- locs.df %>%
     group_by(sp) %>%
     tally() %>%
-    mutate(gen=generation);
+    mutate(gen=generation)#;
   list_abund[[generation]] <- abund           # stores abundance after fight per generation as list (move down)
+ 
+   #SOMETHING IS WRONG HERE -- THE FINAL LIST IS CUT DOWN TO ONLY THOSE SPECIES REMAINING AT GEN 100...
   
   list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
   
   setTxtProgressBar(pb, loop)
    }                                          # end gen
+
+#save move data
+move_temp <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
+  mutate(sp = str_c("SP", sp, sep = " "),
+         ID = as_factor(ID),
+         U_ID = str_c(sp, ID, sep="_"))
+move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each other
+
+#save fight data 
+
+
 }                                             # end rep
 
 close(pb)
-close(pb_gens)
 
 
-# 
-# #---- 6. VISUALISE ----
-# #can get rid of U_ID?
-# 
-#   # Movement ----
-# move_hist <- data.frame(do.call(rbind,list_move))
-# move_hist$sp <- paste("SP", move_hist$sp)
-# move_hist$ID=as.factor(move_hist$ID)
-# move_hist$U_ID <- paste(move_hist$sp, move_hist$ID, sep="_")
-# 
-# random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs     
-# sub_movers <- subset(move_hist, U_ID %in% c(random_select))
-# 
-# movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
-#   geom_raster(aes(fill=hab_bin), alpha=0.7) +
-#   scale_fill_gradient( low="grey10", high="grey5") +
-#   geom_point(data=move_hist, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
-#   scale_colour_viridis(option="viridis", discrete = TRUE)+
-#   geom_path(data=move_hist, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
-#   ggtitle('Individual movement')+
-#   theme_dark()+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(color = "grey20", size = 0.2),
-#         panel.grid.minor = element_line(color = "grey20", size = 0.2),
-#         axis.title = element_text(colour="grey30")
-#             ) +
-#   # theme_dark()+
-#   theme(legend.position="none")+
-#  # labs(title = "Generation {previous_state} of 20" )+
-#   coord_fixed()
-# 
-# movement_fig
-#   
-# # Sp. Abundance ----
-# sp_hist <- data.frame(do.call(rbind,list_abund))
-# sp_hist$sp <- paste("SP", sp_hist$sp)
-# 
-# abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
-# for (genx in 1:ngenerations) {
-#   sub_abund_data <- subset(sp_hist, gen==genx)
-#   sub_abund <- data.frame(gen = genx,
-#                           meanX = mean(sub_abund_data$n),
-#                           sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
-#   abund_running <- rbind(abund_running, sub_abund)
-#   
-# }
-# 
-# sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
-#   geom_ribbon(data = abund_running, 
-#               aes(x=gen, 
-#                   ymin=meanX-sem, 
-#                   ymax=meanX+sem), 
-#               inherit.aes = FALSE)+
-#   geom_line(data = abund_running,
-#             aes(x=gen, 
-#                 y=meanX),
-#             colour="black")+
-#   
-#   geom_line() +
-#   ggtitle('Species abundance')+
-#   ylab("Abundance (by species)")+
-#   xlab("Generation")+
-#   scale_colour_viridis(option="viridis", discrete = TRUE) +
-#   theme_dark()+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text(family = "Arial")
-#   ) +
-#   theme(legend.position = "none") 
-#   
-# sp_fig
-# 
-# # SAD ----------
-# # (contd'd) from above
-# # idea: animate this thorugh time using gganimate()
-# SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
-# SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
-#                           n=0,
-#                           gen=ngenerations)
-# SAD_data <- rbind(SAD_data, SAD_missing)
-# 
-# SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
-#   geom_histogram(aes(y=..density..),binwidth = 5)+
-#   geom_density(colour="red")+
-#   theme_dark()+
-#   ggtitle('Species abundance distribution')+
-#   ylab("Number of species")+
-#   xlab("Abundance")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#   )+
-#   scale_y_continuous( expand=c(0,0)) +
-#   scale_x_continuous( expand=c(0,0))
-# SAD_fig
-# 
+#to do next, figure out why species are disapreading between gens - locs_new has 1-100, but output is reduced to 7 species, what's goin on there? The dataset is somehow cropped to only incldue whatever species make it through to gen100... must be an issue with the reps vs generations? figure out that looping to figure out what is goin on...
+
+#---- 6. VISUALISE ----
+#can get rid of U_ID?
+
+  # Movement ----
+random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs
+sub_movers <- subset(move_hist, U_ID %in% c(random_select))
+
+movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
+  geom_raster(aes(fill=hab_bin), alpha=0.7) +
+  scale_fill_gradient( low="grey10", high="grey5") +
+  geom_point(data=sub_movers, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
+  scale_colour_viridis(option="viridis", discrete = TRUE)+
+  geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
+  ggtitle('Individual movement')+
+  theme_dark()+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(color = "grey20", size = 0.2),
+        panel.grid.minor = element_line(color = "grey20", size = 0.2),
+        axis.title = element_text(colour="grey30")
+            ) +
+  # theme_dark()+
+  theme(legend.position="none")+
+ # labs(title = "Generation {previous_state} of 20" )+
+  coord_fixed()
+
+movement_fig
+
+# Sp. Abundance ----
+sp_hist <- data.frame(do.call(rbind,list_abund)) #unlists output from sim
+sp_hist$sp <- paste("SP", sp_hist$sp)
+
+abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
+for (genx in 1:ngenerations) {
+  sub_abund_data <- subset(sp_hist, gen==genx)
+  sub_abund <- data.frame(gen = genx,
+                          meanX = mean(sub_abund_data$n),
+                          sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
+  abund_running <- rbind(abund_running, sub_abund)
+
+}
+
+sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
+  geom_ribbon(data = abund_running,
+              aes(x=gen,
+                  ymin=meanX-sem,
+                  ymax=meanX+sem),
+              inherit.aes = FALSE)+
+  geom_line(data = abund_running,
+            aes(x=gen,
+                y=meanX),
+            colour="black")+
+
+  geom_line() +
+  ggtitle('Species abundance')+
+  ylab("Abundance (by species)")+
+  xlab("Generation")+
+  scale_colour_viridis(option="viridis", discrete = TRUE) +
+  theme_dark()+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text(family = "Arial")
+  ) +
+  theme(legend.position = "none")
+
+sp_fig
+
+# SAD ----------
+# (contd'd) from above
+# idea: animate this thorugh time using gganimate()
+SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
+SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
+                          n=0,
+                          gen=ngenerations)
+SAD_data <- rbind(SAD_data, SAD_missing)
+
+SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
+  geom_histogram(aes(y=..density..),binwidth = 5)+
+  geom_density(colour="red")+
+  theme_dark()+
+  ggtitle('Species abundance distribution')+
+  ylab("Number of species")+
+  xlab("Abundance")+
+  theme(title = element_text(colour = "white"),
+        plot.background = element_rect(fill = "grey10"),
+        panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(colour="white", family = "Arial"),
+        axis.line = element_line(colour = "grey30"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous( expand=c(0,0)) +
+  scale_x_continuous( expand=c(0,0))
+SAD_fig
+
 # # Sp. Diversity ----
 # sp_div <-  data.frame()                                          # Calculating no.sp in each generation
 # for (genX in 1:ngenerations) {
@@ -629,13 +635,13 @@ close(pb_gens)
 #   plot_annotation(tag_levels = 'a')
 # history_panel
 
-# Animate ----
-# movement_animation <- movement_fig + 
-#   transition_reveal(gen) +
-#   labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
-# move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
-# # anim_save(filename="move_anim.gif")
-# 
+Animate ----
+movement_animation <- movement_fig +
+  transition_reveal(gen) +
+  labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
+move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
+# anim_save(filename="move_anim.gif")
+
 # sp_abund_animation <- sp_fig + 
 #   transition_reveal(gen) 
 # abund_gif <- animate(movement_animation, end_pause = 3, width=400, height=400)
