@@ -39,8 +39,8 @@ ngenerations  = 100    # No. generations
 replicates    = 10    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
-nspecies      = 100    # No. species
-nindiv        = 20    # No. individuals per species
+nspecies      = 30    # No. species
+nindiv        = 40    # No. individuals per species
 tot_indiv     = nspecies*nindiv # Total individuals
 eloss         = 30    # Time-step energy loss
 fight_eloss   = 15    # Energy loss from aggression
@@ -71,7 +71,7 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
 pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
 
 #' unique ID's for each individual
-IDs <- c(1:(nspecies*nindiv*ngenerations))
+IDs <- c(1:(nspecies*nindiv*ngenerations*replicates)) #does it matter if this is unique per replicate, or unique throughout? right now unique throughout
 
 #+echo = F
 #---- 3. INITIALISE  ----------------------------------------------------
@@ -99,7 +99,7 @@ IDs <- c(1:(nspecies*nindiv*ngenerations))
           axis.ticks = element_blank())
  hab.plot
   
-
+#FIGURE OUT WHIHC LOCS TO KEEP ORIGINAL VS UPDATED...
 #' Randomly place individuals of each species in habitat
 locs = cbind(sample(hab_dim,tot_indiv),rep(1:nspecies,each=nindiv))       # Randomly picks locations (V1-cell) for all individuals (V2) 
 locs = cbind(locs,hab_vals[locs[,1]])                                     # habitat value
@@ -111,6 +111,7 @@ locs = locs[order(locs[,1]),]
 locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
+OG_locs <- locs
 
 #+ echo=F
   #----- 4. FUNCTIONS ---------------------------------------------------------  
@@ -268,7 +269,8 @@ return(locs_new)
 #' ### Function - fight
 
 fight <- function(){
-  locs_new <- locs                                                        # Interacting species are those occupying the same cell 
+  locs_new <- locs     #pulls from move endpoint in sim                 
+  # Interacting species are those occupying the same cell 
   loc_ind <- locs_new[,1]                                                 # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                                 # extracts duplicated values from new locations (ie where individuals meet)
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
@@ -370,9 +372,12 @@ fight <- function(){
   
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
+
+
   
- # store data
-  gen <- rep(generation, nrow(locs_new))                                 # Store gen (WARNING - change 1 to generation, replic)
+
+  gen <- rep(generation, nrow(locs_new))
+  # Store gen (WARNING - change 1 to generation, replic)
   repl <- rep(replic, nrow(locs_new))
   locs_new <- cbind(locs_new, gen,repl)  
   
@@ -386,60 +391,61 @@ fight <- function(){
 #' # 5. Simulate
 
 loop=0
-reps=0
-list_move=list()                                                        # list to store move info
+list_move=list()                                                      
 list_fight=list()
 list_abund=list()
 list_rich = list()
 move_hist = tibble()
 
-for (replic in 1:replicates) { #need to reinitialise here!!
-reps = reps + 1  
-#Progress bar update
+## for trouible shooting - delet when done
 
-#setTxtProgressBar(pb, replicates)
-#setTxtProgressBar(pb,reps) #might end up with progress bar for reps only, need combination of reps and generations. let's see if it works first huh...
-# old version pb$tick()
+######
+#replication loop
+for (replic in 1:replicates) { 
+locs <- OG_locs #reset to starting point - is this right level of replication?
+
+#generation loop
 for(generation in 1:ngenerations){
-  
+  gen_rep <- paste("G",generation,"R",replic, sep = "_")
   loop = loop + 1
   
 # Move 
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
-  list_move[[generation]] <- after_move       # stores moves per generation as list
+  list_move[[gen_rep]] <- after_move       # stores moves per generation as list
 # print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
 # Fight
   after_fight <- fight()                      # after_fight = locs_new
 # print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
-  locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep)
+  locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
   IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
   
   rich <- length(unique(locs[,2]))            # No species
-  list_rich[[generation]] <- rich
+  list_rich[[gen_rep]] <- rich
  
   locs.df <-data.frame(locs)                  # Abundance
   locs.df$sp <- as.factor(locs.df$sp)
   abund <- locs.df %>%
     group_by(sp) %>%
     tally() %>%
-    mutate(gen=generation)#;
-  list_abund[[generation]] <- abund           # stores abundance after fight per generation as list (move down)
+    mutate(gen = generation,
+           rep = replic)#;
+  list_abund[[gen_rep]] <- abund           # stores abundance after fight per generation as list (move down)
  
    #SOMETHING IS WRONG HERE -- THE FINAL LIST IS CUT DOWN TO ONLY THOSE SPECIES REMAINING AT GEN 100...
   
-  list_fight[[generation]] <- after_fight     # stores outcomes from fights per generation as list
+  list_fight[[gen_rep]] <- after_fight     # stores outcomes from fights per generation as list
   
   setTxtProgressBar(pb, loop)
    }                                          # end gen
 
-#save move data
+#save move data #WHY IS THIS ONE THE ONLY ONE THAT GETS COLLECTED IN SIM??
 move_temp <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
   mutate(sp = str_c("SP", sp, sep = " "),
          ID = as_factor(ID),
          U_ID = str_c(sp, ID, sep="_"))
-move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each other
+move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each other #IS THIS THE PROBLEM HERE - ARE WE MERGING WEIRDLY?
 
 #save fight data 
 
@@ -448,6 +454,9 @@ move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each
 
 close(pb)
 
+test_move_hist <- move_hist %>% 
+  group_by(gen, repl) %>% 
+  summarise(n=length(sp))
 
 #to do next, figure out why species are disapreading between gens - locs_new has 1-100, but output is reduced to 7 species, what's goin on there? The dataset is somehow cropped to only incldue whatever species make it through to gen100... must be an issue with the reps vs generations? figure out that looping to figure out what is goin on...
 
@@ -481,165 +490,216 @@ movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
 movement_fig
 
 # Sp. Abundance ----
-sp_hist <- data.frame(do.call(rbind,list_abund)) #unlists output from sim
-sp_hist$sp <- paste("SP", sp_hist$sp)
+sp_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  mutate(sp = str_c("SP", sp)) %>% 
+  group_by(gen, sp) %>% 
+  summarise(mean_abund = mean(n),
+            SEM_abund = sd(n)/sqrt(length(n)),
+            reps = length(n))
 
-abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
-for (genx in 1:ngenerations) {
-  sub_abund_data <- subset(sp_hist, gen==genx)
-  sub_abund <- data.frame(gen = genx,
-                          meanX = mean(sub_abund_data$n),
-                          sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
-  abund_running <- rbind(abund_running, sub_abund)
 
-}
 
-sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=n, colour=sp)) +
-  geom_ribbon(data = abund_running,
-              aes(x=gen,
-                  ymin=meanX-sem,
-                  ymax=meanX+sem),
-              inherit.aes = FALSE)+
-  geom_line(data = abund_running,
-            aes(x=gen,
-                y=meanX),
-            colour="black")+
-
+sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=mean_abund, color=sp)) +
+  #pverall mean abundance
+  # geom_ribbon(data = abund_running,
+  #             aes(x=gen,
+  #                 ymin=meanX-sem,
+  #                 ymax=meanX+sem),
+  #             inherit.aes = FALSE)+
+  # geom_line(data = abund_running,
+  #           aes(x=gen,
+  #               y=meanX),
+  #           colour="black")+
+  #species specific abundance
+  geom_ribbon(aes(ymin = mean_abund-SEM_abund,
+                  ymax = mean_abund+SEM_abund),
+              alpha =.5,
+              linetype = 0)+
   geom_line() +
   ggtitle('Species abundance')+
   ylab("Abundance (by species)")+
   xlab("Generation")+
   scale_colour_viridis(option="viridis", discrete = TRUE) +
-  theme_dark()+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
+  theme_classic()+
+  theme(panel.background = element_blank(),
         panel.grid.major = element_line(colour=NA),
         panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
+        axis.title = element_text(family = "Arial"),
         axis.text = element_text(family = "Arial")
   ) +
   theme(legend.position = "none")
 
+#' *all species persist here because over the replicates, there's always at least 2 runs where each species survives 'til the bitter end, even though it's extinct in most other runs.*
 sp_fig
+
 
 # SAD ----------
 # (contd'd) from above
 # idea: animate this thorugh time using gganimate()
-SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
-SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
-                          n=0,
-                          gen=ngenerations)
-SAD_data <- rbind(SAD_data, SAD_missing)
 
-SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
-  geom_histogram(aes(y=..density..),binwidth = 5)+
+#' mean should probbaly not be mean abundance, but mean species per bin?
+
+library(sads)
+SAD_data <- as_tibble(subset(sp_hist, gen==ngenerations)) #extract final species (but as mean??)
+
+#plotting SAD using final gen & final rep
+SAD_data <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  filter(gen==ngenerations, rep == replicates) %>% #  keeps final gen final rep , but figure out how to deal with a mean instead
+  select(sp,n)
+SAD_data_rep <- as.numeric(with(SAD_data, rep(sp,n))) #make into format for octav()
+SAD_octave <- octav(SAD_data_rep)
+
+plot(SAD_octave)
+
+#' Using mean instead
+SAD_mean <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+ filter(gen==ngenerations) %>% #  keeps final gen 
+  group_by(sp, gen) %>% 
+  summarise(n = mean(n)) %>% 
+  pull(n)
+
+SAD_octave <- octav(SAD_mean)
+
+SAD_mean_plot <- plot(SAD_octave)
+
+#' RAD instead
+#' 
+
+(mean_rad <- rad(SAD_mean))
+plot(mean_rad)
+
+#' Plotting manually
+#' 
+
+SAD_fig <- ggplot(data = SAD_data, aes(x = log(n))) +
+  geom_histogram(binwidth = 0.147)+ #logged
+  # geom_histogram(binwidth =4.2)+
   geom_density(colour="red")+
-  theme_dark()+
-  ggtitle('Species abundance distribution')+
+  theme_classic()+
+  ggtitle('SAD final')+
   ylab("Number of species")+
-  xlab("Abundance")+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
-        panel.grid.major = element_line(colour=NA),
+  xlab("Abundance (log)")+
+  theme(panel.grid.major = element_line(colour=NA),
         panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
+        axis.title = element_text( family = "Arial"),
         axis.text = element_text( family = "Arial")
   )+
   scale_y_continuous( expand=c(0,0)) +
   scale_x_continuous( expand=c(0,0))
+
 SAD_fig
 
-# # Sp. Diversity ----
-# sp_div <-  data.frame()                                          # Calculating no.sp in each generation
-# for (genX in 1:ngenerations) {
-#   gen_div <- data.frame(gen=genX, 
-#   div=length(unique(subset(sp_hist, gen==genX))$sp))
-#   sp_div=rbind(sp_div,gen_div)
-#   }
-# 
-#   
-# div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
-#   geom_line(colour = "#35B779") +
-#   theme_dark()+
-#   ggtitle('Species diversity')+
-#   ylab("Number of species")+
-#   xlab("Generation")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#         )+
-#   scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
-#   scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
-#   
-# div_fig
-# 
+#' as a ridgeline plot
+
+library(ggridges)
+gen_filter <- c(1, seq(from = 10, to=ngenerations, by = 10))
+  
+SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  group_by(sp, gen) %>% 
+  summarise(n = mean(n)) %>% 
+  mutate(gen=as.factor(gen)) %>% 
+  filter(gen%in%gen_filter)
+
+(SAD_ridge_plot <- ggplot(data = SAD_mean_ridge, aes(x=log(n), y=fct_rev(gen), fill = gen))+
+  geom_density_ridges()+
+  theme_ridges()+
+  theme(legend.position = "none")+
+  labs(x="log(Mean abundance)", y = "Generation"))
+
+# Sp. Diversity ----
+sp_div_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  mutate(sp = str_c("SP", sp)) %>% 
+  group_by(rep, gen) %>% 
+  tally() %>% 
+  group_by(gen) %>% 
+  summarise(mean_n=mean(n),
+            SEM_n=sd(n)/sqrt(length(n)),
+            max_n=max(n),
+            min_n=min(n))
+
+
+ 
+div_fig <- ggplot(data=sp_div_hist, aes(x=gen,y=mean_n)) +
+  geom_ribbon(aes(ymin=mean_n-SEM_n, ymax=mean_n+SEM_n), fill = "#35B779",  alpha = 0.6)+
+  geom_line(colour = "#35B779") +
+  theme_classic()+
+  ggtitle('Species diversity')+
+  ylab("Number of species")+
+  xlab("Generation")+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(family = "Arial"),
+        axis.text = element_text( family = "Arial")
+        )+
+  scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
+  scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
+
+div_fig
+
 # # Energy ----
-# e_data <- move_hist %>%                                       # calculating mean/se e-level
-#   group_by(gen, sp) %>%
-#   summarise(e_avg = mean(e_val),
-#             e_sem = sd(e_val)/sqrt(length(e_val)))
-# 
-# e_trend <- move_hist %>%
-#   group_by(gen) %>%
-#   summarise(e_avg = mean(e_val),
-#             e_sem = sd(e_val)/sqrt(length(e_val)))
-# 
-# e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
-#   geom_line()+
-#   geom_ribbon(data= e_trend, 
-#               aes(x=gen, 
-#                   ymin=e_avg-e_sem, 
-#                   ymax=e_avg+e_sem), 
-#               alpha=0.7, 
-#               inherit.aes = FALSE)+
-#   geom_line( data = e_trend,
-#              aes(x=gen,
-#                  y=e_avg),
-#              colour="black",
-#              inherit.aes = FALSE)+
-#   theme_dark()+
-#   ggtitle('Energy levels (mean per species)')+
-#   ylab("Energy")+
-#   xlab("Generation")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#   )+
-#   scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
-#   scale_x_continuous(expand=c(0,0)) +
-#   theme(legend.position = "none") 
-# e_fig
+e_data <- move_hist %>%                                       # calculating mean/se e-level
+  group_by(gen, sp) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+
+e_trend <- move_hist %>%
+  group_by(gen) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+
+e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
+  geom_line()+
+  geom_ribbon(data= e_trend,
+              aes(x=gen,
+                  ymin=e_avg-e_sem,
+                  ymax=e_avg+e_sem),
+              alpha=0.7,
+              inherit.aes = FALSE)+
+  geom_line( data = e_trend,
+             aes(x=gen,
+                 y=e_avg),
+             colour="black",
+             inherit.aes = FALSE)+
+  theme_classic()+
+  ggtitle('E-levels (mean)')+
+  ylab("Energy")+
+  xlab("Generation")+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(family = "Arial"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
+  scale_x_continuous(expand=c(0,0)) +
+  theme(legend.position = "none")
+e_fig
 # 
 # # Panel ----
-# library(patchwork)
-# 
-# history_panel  <-   ((sp_fig | SAD_fig +
-#                         plot_layout(c(2,1))) 
-#                      /(div_fig | e_fig) +
-#                        plot_layout(widths = c(1,1))) +
-#   plot_layout(heights =  c(2,1) ) +
-#   plot_annotation(tag_levels = 'a')
-# history_panel
+library(patchwork)
 
-Animate ----
-movement_animation <- movement_fig +
-  transition_reveal(gen) +
-  labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
-move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
+history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
+(history_panel <- history_4 / (SAD_ridge_plot)+
+  plot_layout(heights = c(1,1,2)))
+ 
+
+
+
+history_panel  <-   ((sp_fig | SAD_fig) +
+                        plot_layout(c(2,1))
+                     /(div_fig | e_fig) +
+                       plot_layout(widths = c(1,1))
+                     /(SAD_ridge_plot)) +
+  plot_layout(heights =  c(2,1,3) ) +
+  plot_annotation(tag_levels = 'a')
+history_panel
+
+# Animate ----
+# movement_animation <- movement_fig +
+#   transition_reveal(gen) +
+#   labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
+# move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
 # anim_save(filename="move_anim.gif")
 
 # sp_abund_animation <- sp_fig + 
