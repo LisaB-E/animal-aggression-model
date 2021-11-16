@@ -2,17 +2,7 @@
 demographic changes at the population level using IBM”
 ================
 “LBE”
-09 November, 2021
-
-## Current structure
-
-For loop 1 - repeat for each replicate  
-- 2. Move  
-- 3. Fight - dependent o energy  
-- 4. Feed -  
-- 5. Reproduce  
-- 6. Energy gain/loss  
-End FL1
+16 November, 2021
 
 # 1. Workspace preparation
 
@@ -36,12 +26,12 @@ IBM Parameters *should include constraints on each parametre*. Double
 check how many are needed in reduced model
 
 ``` r
-ngenerations  = 10    # No. generations
-replicates    = 10    # No. replicates (first half trans. second half intrans.)
+ngenerations  = 30    # No. generations
+replicates    = 5     # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
-nspecies      = 100    # No. species
-nindiv        = 20    # No. individuals per species
+nspecies      = 30    # No. species
+nindiv        = 40    # No. individuals per species
 tot_indiv     = nspecies*nindiv # Total individuals
 eloss         = 30    # Time-step energy loss
 fight_eloss   = 15    # Energy loss from aggression
@@ -70,7 +60,8 @@ aggression = matrix(0.5, ncol=nspecies, nrow = nspecies)
 diag(aggression) = 0.5 # For interaction between individuals of the same species 
 ```
 
-Store species richness at each generation
+Store species richness at each generation IS THIS NEEDED, CAN’T GET FROM
+END LISTS?
 
 ``` r
 rich = data.frame(gen=rep(1:ngenerations,replicates),
@@ -79,13 +70,11 @@ rich = data.frame(gen=rep(1:ngenerations,replicates),
                   type=NA)
 ```
 
-Progress bar *use pb$tick() in for-loop to run*
+Progress bar
 
 ``` r
 pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
 ```
-
-    ##   |                                                                              |                                                                      |   0%
 
 unique ID’s for each individual
 
@@ -112,32 +101,21 @@ Make matrix
                             value='hab_bin'))
 ```
 
-## Plot habitat values
+Plot habitat values
 
 ``` r
   hab.plot = ggplot(hab_bin) + theme_bw() +
     geom_raster(aes(x,y,fill=hab_bin)) +
-    scale_x_continuous(expand=expand_scale(add=0)) +
-    scale_y_continuous(expand=expand_scale(add=0)) +
+    scale_x_continuous(expand=expansion(add=0)) +
+    scale_y_continuous(expand=expansion(add=0)) +
     theme(legend.position = 'top',
           axis.text=element_blank(),
           axis.title = element_blank(),
           axis.ticks = element_blank())
-```
-
-    ## Warning: `expand_scale()` is deprecated; use `expansion()` instead.
-
-    ## Warning: `expand_scale()` is deprecated; use `expansion()` instead.
-
-``` r
  hab.plot
 ```
 
-![](general-model_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
-
-``` r
-#FIGURE OUT WHIHC LOCS TO KEEP ORIGINAL VS UPDATED...
-```
+![](general-model_files/figure-gfm/habitat.matrix-1.png)<!-- -->
 
 Randomly place individuals of each species in habitat
 
@@ -146,7 +124,7 @@ locs = cbind(sample(hab_dim,tot_indiv),rep(1:nspecies,each=nindiv))       # Rand
 locs = cbind(locs,hab_vals[locs[,1]])                                     # habitat value
 ```
 
-add energetic value
+Add energetic value
 
 ``` r
 locs = cbind(locs,rep(100,nindiv))                                        # starting energetic value =100?
@@ -155,7 +133,7 @@ locs = locs[order(locs[,1]),]
 locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
-OG_locs <- locs
+OG_locs <- locs                                                           # each rep in sim starts with same initialised habitat 
 ```
 
 # 4. Functions
@@ -165,7 +143,7 @@ OG_locs <- locs
 ``` r
 move <- function(){      
   
-  # Place individuals in habitat
+# Place individuals in habitat
   habitat = matrix(0,ncol=dim,nrow=dim)                                # make 100 x 100 matrix
   habitat[locs[,1]] = 1                                                # places individual in the matrix
   
@@ -175,8 +153,8 @@ move <- function(){
                           (hab_dim-dim+1):hab_dim))                    # bottom
   
   
-ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]          # which edge corner cells are occupied
-ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which individuals are on edge corner cells (V2&V1)
+ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]             # which edge corner cells are occupied
+ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which individuals are on edge corner cells (V2&V1)
   offec_indiv <- locs[locs[,1]%in%setdiff(locs[,1],ec_indiv[,1]),]     # individuals  NOT on edge corner cells (V1&v2)
   
   offec_indiv <- cbind(offec_indiv, sample(step_moves, dim(offec_indiv)[1], replace = TRUE)) # add move step to non edge inds (V3)
@@ -185,12 +163,12 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
 #goal: figure out how to do this neater (not sure the if else statements are neede for samppling of the step_moves, surely a dim=1 woudl replace the if TRUE part?)*
   
   ec_indiv_new <- NULL
-  if(sum(ec_indiv[,1]==1)>0){                                         # Q1 find if any inds are in top left corner
-    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                         # VALUE IF TRUE -pull out that data
-    if(is.null(dim(top_left_ind))){                                     # Q2 if top left individual does not exist
-      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))          # VALUE IF TRUE move down, right or diagonal
+  if(sum(ec_indiv[,1]==1)>0){                                          # Q1 find if any inds are in top left corner
+    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                          # VALUE IF TRUE -pull out that data
+    if(is.null(dim(top_left_ind))){                                    # Q2 if top left individual does not exist
+      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))    # VALUE IF TRUE move down, right or diagonal
     }else{                                     
-      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],         # VALUE IF FALSE
+      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],   # VALUE IF FALSE
                                                dim(top_left_ind)[1],r=T))
     }
     ec_indiv_new = rbind(ec_indiv_new,top_left_ind)
@@ -205,7 +183,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,top_right_ind)
   }
-  if(sum(ec_indiv[,1] == dim)>0){                                                     #bottom left
+  if(sum(ec_indiv[,1] == dim)>0){                                                     # bottom left
     bottom_left_ind = ec_indiv[ec_indiv[,1]==dim,]
     if(is.null(dim(bottom_left_ind))){
       bottom_left_ind = c(bottom_left_ind,sample(step_moves[c(1, 2:4)],1))
@@ -215,7 +193,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_left_ind)
   }
-  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom righ
+  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  # bottom right
     bottom_right_ind = ec_indiv[ec_indiv[,1]==hab_dim,]
     if(is.null(dim(bottom_right_ind))){
       bottom_right_ind = c(bottom_right_ind,sample(step_moves[c(1:2,8:9)],1))
@@ -225,7 +203,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_right_ind)
   }
-  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              #left edge
+  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              # left edge
     left_edge_ind = ec_indiv[ec_indiv[,1]%in%(2:(dim-1)),]
     if(is.null(dim(left_edge_ind))){
       left_edge_ind = c(left_edge_ind,sample(step_moves[c(1,2:6)],1))
@@ -235,7 +213,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,left_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             #right edge
+  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                            # right edge
     right_edge_ind = ec_indiv[ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)),]
     if(is.null(dim(right_edge_ind))){
       right_edge_ind = c(right_edge_ind,sample(step_moves[c(1:2,6:9)],1))
@@ -245,7 +223,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,right_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        #top edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){      # top edge
     top_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),
                                                     c(1,hab_dim-dim+1)),]
     if(is.null(dim(top_edge_ind))){
@@ -256,7 +234,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,top_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){                #bottom edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){          # bottom edge
     bottom_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),
                                                        c(dim,hab_dim)),]
     if(is.null(dim(bottom_edge_ind))){
@@ -267,7 +245,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_edge_ind)
     
-  }                                                                       #end find edge individs section
+  }                                                                                     # end find edge individs section
   
 # move 
 rownames(ec_indiv_new) = NULL
@@ -283,7 +261,7 @@ locs_new = locs_new[order(locs_new[,1]),]
 
 gen <- rep(generation, nrow(locs_new))                                # output cleanup 
 repl <- rep(replic, nrow(locs_new)) 
-locs_new <- cbind(locs_new, gen, repl)                               # add generation number V6, repl V7
+locs_new <- cbind(locs_new, gen, repl)                                # add generation number V6, repl V7
 
 # Getting x & y coords for animation
 temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                          # make 100 x 100 matrix
@@ -301,9 +279,9 @@ for (dupe in 1:nrow(temp_dupes)) {
   triple_threat_list[[dupe]] <- temp_coordsX
 }
 
-temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
-temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
-temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
+temp_coords2 <- do.call(rbind,triple_threat_list)                     # extract each list
+temp_coords <- rbind(temp_coords1, temp_coords2)                      # merge coords inclduing dupes
+temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]  # reorder
 locs_new <- cbind(locs_new, temp_coords)
 
 return(locs_new)                                                        
@@ -315,11 +293,12 @@ return(locs_new)
 
 ``` r
 fight <- function(){
-  locs_new <- locs     #pulls from move endpoint in sim                 
-  # Interacting species are those occupying the same cell 
-  loc_ind <- locs_new[,1]                                                 # extracts cell locations
-  int_loc <- loc_ind[duplicated(loc_ind)]                                 # extracts duplicated values from new locations (ie where individuals meet)
-  fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
+  locs_new <- locs                                                    # pulls from move endpoint in sim                 
+  
+# Interacting species are those occupying the same cell 
+  loc_ind <- locs_new[,1]                                             # extracts cell locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                             # extracts cell contains multiple individuals ('fighters')
+  fighters <- locs_new[locs_new[,1]%in%int_loc,]                      # extracts values for fighters
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
   
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
@@ -327,7 +306,8 @@ fight <- function(){
  
   # Roulette selection for winners
   all_winners = NULL
- 
+
+  # fight in pairs 
   for(i in unique(fighters[,1])){
     sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters in same cell
     win_vect = rep(0,length(sp_in_cell[,2]))                             # creates vector for the number of fighting indiviuals in cell
@@ -363,15 +343,15 @@ fight <- function(){
       rowcount = 0
       rowsum = 0
                                                           
-      while(rowsum!=5){                                                 # 5 = all cells matches with the loser
+      while(rowsum!=5){                                                  # 5 = all cells matches with the loser
         rowcount = rowcount+1
-        rowsum = sum(sp_in_cell[rowcount,] == loser)                    # checks whether top row = loser
+        rowsum = sum(sp_in_cell[rowcount,] == loser)                     # checks whether top row = loser
       }
-       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                       # removes loser from sp in cell
+       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                        # removes loser from sp in cell
       }      
-      }                                                                 # loops back to next fightJ
+      }                                                                  # loops back to next fightJ
     
-    initial = fighters[fighters[,1]==i,]                                # identifies starting individs in cell (.ie OG sp_in_cell)
+    initial = fighters[fighters[,1]==i,]                                 # identifies starting individs in cell (.ie OG sp_in_cell)
    
 # identify which individ is winner to add to win_vect tally
    if(nrow(sp_in_cell)>0) {                                              # if all were low energy
@@ -379,20 +359,20 @@ fight <- function(){
     rowsum = 0
     while(rowsum!=5){                                 
       rowcount = rowcount + 1
-      rowsum = sum(initial[rowcount,] == sp_in_cell)                    # finds winner in sp_in_cell
+      rowsum = sum(initial[rowcount,] == sp_in_cell)                     # finds winner in sp_in_cell
     }
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
    }
     all_winners = c(all_winners,win_vect)
-    }                                                                   #loops back to next cell with multiples
-  fighters = cbind(fighters,all_winners)                               # merges 
+    }                                                                    # loops back to next cell with multiples
+  fighters = cbind(fighters,all_winners)                                 # merges 
   
- # Lose energy
-  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
-  winners = fighters[fighters[,6]==1, , drop=FALSE]                                   # Differentiate winners and losers 
+# Lose energy post fight
+  fighters[,4] = fighters[,4]-fight_eloss                                # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
+  winners = fighters[fighters[,6]==1, , drop=FALSE]                      # Differentiate winners and losers 
   losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
-  losers = losers[losers[,4]>0, ,drop=FALSE]                                       # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
+  losers = losers[losers[,4]>0, ,drop=FALSE]                             # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
 
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
@@ -419,9 +399,7 @@ fight <- function(){
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
 
-
-  
-
+# save data
   gen <- rep(generation, nrow(locs_new))
   # Store gen (WARNING - change 1 to generation, replic)
   repl <- rep(replic, nrow(locs_new))
@@ -442,25 +420,23 @@ list_abund=list()
 list_rich = list()
 move_hist = tibble()
 
-## for trouible shooting - delet when done
 
-######
-#replication loop
+# start replication loop
 for (replic in 1:replicates) { 
 locs <- OG_locs #reset to starting point - is this right level of replication?
 
-#generation loop
+# start timestep loop
 for(generation in 1:ngenerations){
-  gen_rep <- paste(generation,replic, sep = "_")
+  gen_rep <- paste("G",generation,"R",replic, sep = "_")
   loop = loop + 1
   
-# Move 
+# *Move*
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
   list_move[[gen_rep]] <- after_move       # stores moves per generation as list
 # print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
-# Fight
+# *Fight*
   after_fight <- fight()                      # after_fight = locs_new
 # print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
@@ -485,7 +461,7 @@ for(generation in 1:ngenerations){
   setTxtProgressBar(pb, loop)
    }                                          # end gen
 
-#save move data
+#save move data #WHY IS THIS ONE THE ONLY ONE THAT GETS COLLECTED IN SIM??
 move_temp <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
   mutate(sp = str_c("SP", sp, sep = " "),
          ID = as_factor(ID),
@@ -496,13 +472,15 @@ move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each
 
 
 }                                             # end rep
-```
-
-    ##   |                                                                              |=                                                                     |   1%  |                                                                              |=                                                                     |   2%  |                                                                              |==                                                                    |   3%  |                                                                              |===                                                                   |   4%  |                                                                              |====                                                                  |   5%  |                                                                              |====                                                                  |   6%  |                                                                              |=====                                                                 |   7%  |                                                                              |======                                                                |   8%  |                                                                              |======                                                                |   9%  |                                                                              |=======                                                               |  10%  |                                                                              |========                                                              |  11%  |                                                                              |========                                                              |  12%  |                                                                              |=========                                                             |  13%  |                                                                              |==========                                                            |  14%  |                                                                              |==========                                                            |  15%  |                                                                              |===========                                                           |  16%  |                                                                              |============                                                          |  17%  |                                                                              |=============                                                         |  18%  |                                                                              |=============                                                         |  19%  |                                                                              |==============                                                        |  20%  |                                                                              |===============                                                       |  21%  |                                                                              |===============                                                       |  22%  |                                                                              |================                                                      |  23%  |                                                                              |=================                                                     |  24%  |                                                                              |==================                                                    |  25%  |                                                                              |==================                                                    |  26%  |                                                                              |===================                                                   |  27%  |                                                                              |====================                                                  |  28%  |                                                                              |====================                                                  |  29%  |                                                                              |=====================                                                 |  30%  |                                                                              |======================                                                |  31%  |                                                                              |======================                                                |  32%  |                                                                              |=======================                                               |  33%  |                                                                              |========================                                              |  34%  |                                                                              |========================                                              |  35%  |                                                                              |=========================                                             |  36%  |                                                                              |==========================                                            |  37%  |                                                                              |===========================                                           |  38%  |                                                                              |===========================                                           |  39%  |                                                                              |============================                                          |  40%  |                                                                              |=============================                                         |  41%  |                                                                              |=============================                                         |  42%  |                                                                              |==============================                                        |  43%  |                                                                              |===============================                                       |  44%  |                                                                              |================================                                      |  45%  |                                                                              |================================                                      |  46%  |                                                                              |=================================                                     |  47%  |                                                                              |==================================                                    |  48%  |                                                                              |==================================                                    |  49%  |                                                                              |===================================                                   |  50%  |                                                                              |====================================                                  |  51%  |                                                                              |====================================                                  |  52%  |                                                                              |=====================================                                 |  53%  |                                                                              |======================================                                |  54%  |                                                                              |======================================                                |  55%  |                                                                              |=======================================                               |  56%  |                                                                              |========================================                              |  57%  |                                                                              |=========================================                             |  58%  |                                                                              |=========================================                             |  59%  |                                                                              |==========================================                            |  60%  |                                                                              |===========================================                           |  61%  |                                                                              |===========================================                           |  62%  |                                                                              |============================================                          |  63%  |                                                                              |=============================================                         |  64%  |                                                                              |==============================================                        |  65%  |                                                                              |==============================================                        |  66%  |                                                                              |===============================================                       |  67%  |                                                                              |================================================                      |  68%  |                                                                              |================================================                      |  69%  |                                                                              |=================================================                     |  70%  |                                                                              |==================================================                    |  71%  |                                                                              |==================================================                    |  72%  |                                                                              |===================================================                   |  73%  |                                                                              |====================================================                  |  74%  |                                                                              |====================================================                  |  75%  |                                                                              |=====================================================                 |  76%  |                                                                              |======================================================                |  77%  |                                                                              |=======================================================               |  78%  |                                                                              |=======================================================               |  79%  |                                                                              |========================================================              |  80%  |                                                                              |=========================================================             |  81%  |                                                                              |=========================================================             |  82%  |                                                                              |==========================================================            |  83%  |                                                                              |===========================================================           |  84%  |                                                                              |============================================================          |  85%  |                                                                              |============================================================          |  86%  |                                                                              |=============================================================         |  87%  |                                                                              |==============================================================        |  88%  |                                                                              |==============================================================        |  89%  |                                                                              |===============================================================       |  90%  |                                                                              |================================================================      |  91%  |                                                                              |================================================================      |  92%  |                                                                              |=================================================================     |  93%  |                                                                              |==================================================================    |  94%  |                                                                              |==================================================================    |  95%  |                                                                              |===================================================================   |  96%  |                                                                              |====================================================================  |  97%  |                                                                              |===================================================================== |  98%  |                                                                              |===================================================================== |  99%  |                                                                              |======================================================================| 100%
-
-``` r
 close(pb)
+
+
+test_move_hist <- move_hist %>% 
+  group_by(gen, repl) %>% 
+  summarise(n=length(sp))
 ```
+
+    ## `summarise()` has grouped output by 'gen'. You can override using the `.groups` argument.
 
 ``` r
 #to do next, figure out why species are disapreading between gens - locs_new has 1-100, but output is reduced to 7 species, what's goin on there? The dataset is somehow cropped to only incldue whatever species make it through to gen100... must be an issue with the reps vs generations? figure out that looping to figure out what is goin on...
@@ -514,8 +492,10 @@ close(pb)
   # Movement ----
 random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs
 sub_movers <- subset(move_hist, U_ID %in% c(random_select))
+```
 
-movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
+``` r
+(movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
   geom_raster(aes(fill=hab_bin), alpha=0.7) +
   scale_fill_gradient( low="grey10", high="grey5") +
   geom_point(data=sub_movers, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
@@ -533,12 +513,10 @@ movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
   # theme_dark()+
   theme(legend.position="none")+
  # labs(title = "Generation {previous_state} of 20" )+
-  coord_fixed()
-
-movement_fig
+  coord_fixed())
 ```
 
-![](general-model_files/figure-gfm/-%206.%20VISUALISE-1.png)<!-- -->
+![](general-model_files/figure-gfm/movement.plot-1.png)<!-- -->
 
 ``` r
 # Sp. Abundance ----
@@ -546,125 +524,24 @@ sp_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   mutate(sp = str_c("SP", sp)) %>% 
   group_by(gen, sp) %>% 
   summarise(mean_abund = mean(n),
-            SEM_abund = sd(n)/sqrt(length(n)))
+            SEM_abund = sd(n)/sqrt(length(n)),
+            reps = length(n))
 ```
 
     ## `summarise()` has grouped output by 'gen'. You can override using the `.groups` argument.
 
 ``` r
-abund_running <- data.frame()                                                   # generate overall mean and se (across spp)
-for (genx in 1:ngenerations) {
-  sub_abund_data <- subset(sp_hist, gen==genx)
-  sub_abund <- data.frame(gen = genx,
-                          meanX = mean(sub_abund_data$n),
-                          sem = sd(sub_abund_data$n)/sqrt(length(sub_abund_data$n)))
-  abund_running <- rbind(abund_running, sub_abund)
-
-}
-```
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning in mean.default(sub_abund_data$n): argument is not numeric or logical:
-    ## returning NA
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-    ## Warning: Unknown or uninitialised column: `n`.
-
-``` r
 sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=mean_abund, color=sp)) +
   #pverall mean abundance
-  geom_ribbon(data = abund_running,
-              aes(x=gen,
-                  ymin=meanX-sem,
-                  ymax=meanX+sem),
-              inherit.aes = FALSE)+
-  geom_line(data = abund_running,
-            aes(x=gen,
-                y=meanX),
-            colour="black")+
+  # geom_ribbon(data = abund_running,
+  #             aes(x=gen,
+  #                 ymin=meanX-sem,
+  #                 ymax=meanX+sem),
+  #             inherit.aes = FALSE)+
+  # geom_line(data = abund_running,
+  #           aes(x=gen,
+  #               y=meanX),
+  #           colour="black")+
   #species specific abundance
   geom_ribbon(aes(ymin = mean_abund-SEM_abund,
                   ymax = mean_abund+SEM_abund),
@@ -675,137 +552,282 @@ sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=mean_abund, color=sp)) +
   ylab("Abundance (by species)")+
   xlab("Generation")+
   scale_colour_viridis(option="viridis", discrete = TRUE) +
-  theme_dark()+
-  theme(title = element_text(colour = "white"),
-        plot.background = element_rect(fill = "grey10"),
-        panel.background = element_blank(),
+  theme_classic()+
+  theme(panel.background = element_blank(),
         panel.grid.major = element_line(colour=NA),
         panel.grid.minor = element_line(color =NA),
-        axis.title = element_text(colour="white", family = "Arial"),
-        axis.line = element_line(colour = "grey30"),
+        axis.title = element_text(family = "Arial"),
         axis.text = element_text(family = "Arial")
   ) +
   theme(legend.position = "none")
+```
 
+*all species persist here because over the replicates, there’s always at
+least 2 runs where each species survives ’til the bitter end, even
+though it’s extinct in most other runs.*
+
+``` r
 sp_fig
 ```
 
-    ## Warning in max(ids, na.rm = TRUE): no non-missing arguments to max; returning
-    ## -Inf
-
-    ## Warning: Removed 10 row(s) containing missing values (geom_path).
-
-![](general-model_files/figure-gfm/-%206.%20VISUALISE-2.png)<!-- -->
+![](general-model_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ``` r
 # SAD ----------
 # (contd'd) from above
 # idea: animate this thorugh time using gganimate()
-# SAD_data <- data.frame(subset(sp_hist, gen==ngenerations))
-# SAD_missing <- data.frame(sp=setdiff(sp_hist[,1], SAD_data[,1]), # finds extinct species
-#                           n=0,
-#                           gen=ngenerations)
-# SAD_data <- rbind(SAD_data, SAD_missing)
-# 
-# SAD_fig <- ggplot(data = SAD_data, aes(x = n)) +
-#   geom_histogram(aes(y=..density..),binwidth = 5)+
-#   geom_density(colour="red")+
-#   theme_dark()+
-#   ggtitle('Species abundance distribution')+
-#   ylab("Number of species")+
-#   xlab("Abundance")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#   )+
-#   scale_y_continuous( expand=c(0,0)) +
-#   scale_x_continuous( expand=c(0,0))
-# SAD_fig
+```
 
-# # Sp. Diversity ----
-# sp_div <-  data.frame()                                          # Calculating no.sp in each generation
-# for (genX in 1:ngenerations) {
-#   gen_div <- data.frame(gen=genX, 
-#   div=length(unique(subset(sp_hist, gen==genX))$sp))
-#   sp_div=rbind(sp_div,gen_div)
-#   }
-# 
-#   
-# div_fig <- ggplot(sp_div, aes(x=gen,y=div)) +
-#   geom_line(colour = "#35B779") +
-#   theme_dark()+
-#   ggtitle('Species diversity')+
-#   ylab("Number of species")+
-#   xlab("Generation")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#         )+
-#   scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
-#   scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
-#   
-# div_fig
-# 
+mean should probbaly not be mean abundance, but mean species per bin?
+
+``` r
+library(sads)
+```
+
+    ## Loading required package: bbmle
+
+    ## Loading required package: stats4
+
+    ## 
+    ## Attaching package: 'bbmle'
+
+    ## The following object is masked from 'package:dplyr':
+    ## 
+    ##     slice
+
+``` r
+SAD_data <- as_tibble(subset(sp_hist, gen==ngenerations)) #extract final species (but as mean??)
+
+#plotting SAD using final gen & final rep
+SAD_data <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  filter(gen==ngenerations, rep == replicates) %>% #  keeps final gen final rep , but figure out how to deal with a mean instead
+  select(sp,n)
+SAD_data_rep <- as.numeric(with(SAD_data, rep(sp,n))) #make into format for octav()
+SAD_octave <- octav(SAD_data_rep)
+
+plot(SAD_octave)
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+Using mean instead
+
+``` r
+SAD_mean <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+ filter(gen==ngenerations) %>% #  keeps final gen 
+  group_by(sp, gen) %>% 
+  summarise(n = mean(n)) %>% 
+  pull(n)
+```
+
+    ## `summarise()` has grouped output by 'sp'. You can override using the `.groups` argument.
+
+``` r
+SAD_octave <- octav(SAD_mean)
+
+SAD_mean_plot <- plot(SAD_octave)
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+RAD instead
+
+``` r
+(mean_rad <- rad(SAD_mean))
+```
+
+    ##    rank     abund
+    ## 1     1 33.400000
+    ## 2     2 32.800000
+    ## 3     3 31.000000
+    ## 4     4 29.800000
+    ## 5     5 29.750000
+    ## 6     6 27.200000
+    ## 7     7 27.200000
+    ## 8     8 24.200000
+    ## 9     9 24.000000
+    ## 10   10 23.000000
+    ## 11   11 22.250000
+    ## 12   12 22.000000
+    ## 13   13 22.000000
+    ## 14   14 22.000000
+    ## 15   15 21.600000
+    ## 16   16 21.000000
+    ## 17   17 20.200000
+    ## 18   18 18.250000
+    ## 19   19 17.600000
+    ## 20   20 15.000000
+    ## 21   21 14.200000
+    ## 22   22 14.000000
+    ## 23   23 13.750000
+    ## 24   24 13.500000
+    ## 25   25 13.333333
+    ## 26   26 12.400000
+    ## 27   27 11.800000
+    ## 28   28 11.250000
+    ## 29   29  9.000000
+    ## 30   30  6.333333
+
+``` r
+plot(mean_rad)
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+Plotting manually
+
+``` r
+SAD_fig <- ggplot(data = SAD_data, aes(x = log(n))) +
+  geom_histogram(binwidth = 0.147)+ #logged
+  # geom_histogram(binwidth =4.2)+
+  geom_density(colour="red")+
+  theme_classic()+
+  ggtitle('SAD final')+
+  ylab("Number of species")+
+  xlab("Abundance (log)")+
+  theme(panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text( family = "Arial"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous( expand=c(0,0)) +
+  scale_x_continuous( expand=c(0,0))
+
+SAD_fig
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
+as a ridgeline plot
+
+``` r
+library(ggridges)
+gen_filter <- c(1, seq(from = 10, to=ngenerations, by = 10))
+  
+SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  group_by(sp, gen) %>% 
+  summarise(n = mean(n)) %>% 
+  mutate(gen=as.factor(gen)) %>% 
+  filter(gen%in%gen_filter)
+```
+
+    ## `summarise()` has grouped output by 'sp'. You can override using the `.groups` argument.
+
+``` r
+(SAD_ridge_plot <- ggplot(data = SAD_mean_ridge, aes(x=log(n), y=fct_rev(gen), fill = gen))+
+  geom_density_ridges()+
+  theme_ridges()+
+  theme(legend.position = "none")+
+  labs(x="log(Mean abundance)", y = "Generation"))
+```
+
+    ## Picking joint bandwidth of 0.107
+
+![](general-model_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+``` r
+# Sp. Diversity ----
+sp_div_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
+  mutate(sp = str_c("SP", sp)) %>% 
+  group_by(rep, gen) %>% 
+  tally() %>% 
+  group_by(gen) %>% 
+  summarise(mean_n=mean(n),
+            SEM_n=sd(n)/sqrt(length(n)),
+            max_n=max(n),
+            min_n=min(n))
+
+
+ 
+div_fig <- ggplot(data=sp_div_hist, aes(x=gen,y=mean_n)) +
+  geom_ribbon(aes(ymin=mean_n-SEM_n, ymax=mean_n+SEM_n), fill = "#35B779",  alpha = 0.6)+
+  geom_line(colour = "#35B779") +
+  theme_classic()+
+  ggtitle('Species diversity')+
+  ylab("Number of species")+
+  xlab("Generation")+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(family = "Arial"),
+        axis.text = element_text( family = "Arial")
+        )+
+  scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
+  scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
+
+div_fig
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-24-2.png)<!-- -->
+
+``` r
 # # Energy ----
-# e_data <- move_hist %>%                                       # calculating mean/se e-level
-#   group_by(gen, sp) %>%
-#   summarise(e_avg = mean(e_val),
-#             e_sem = sd(e_val)/sqrt(length(e_val)))
-# 
-# e_trend <- move_hist %>%
-#   group_by(gen) %>%
-#   summarise(e_avg = mean(e_val),
-#             e_sem = sd(e_val)/sqrt(length(e_val)))
-# 
-# e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
-#   geom_line()+
-#   geom_ribbon(data= e_trend, 
-#               aes(x=gen, 
-#                   ymin=e_avg-e_sem, 
-#                   ymax=e_avg+e_sem), 
-#               alpha=0.7, 
-#               inherit.aes = FALSE)+
-#   geom_line( data = e_trend,
-#              aes(x=gen,
-#                  y=e_avg),
-#              colour="black",
-#              inherit.aes = FALSE)+
-#   theme_dark()+
-#   ggtitle('Energy levels (mean per species)')+
-#   ylab("Energy")+
-#   xlab("Generation")+
-#   theme(title = element_text(colour = "white"),
-#         plot.background = element_rect(fill = "grey10"),
-#         panel.background = element_blank(),
-#         panel.grid.major = element_line(colour=NA),
-#         panel.grid.minor = element_line(color =NA),
-#         axis.title = element_text(colour="white", family = "Arial"),
-#         axis.line = element_line(colour = "grey30"),
-#         axis.text = element_text( family = "Arial")
-#   )+
-#   scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
-#   scale_x_continuous(expand=c(0,0)) +
-#   theme(legend.position = "none") 
-# e_fig
+e_data <- move_hist %>%                                       # calculating mean/se e-level
+  group_by(gen, sp) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+```
+
+    ## `summarise()` has grouped output by 'gen'. You can override using the `.groups` argument.
+
+``` r
+e_trend <- move_hist %>%
+  group_by(gen) %>%
+  summarise(e_avg = mean(e_val),
+            e_sem = sd(e_val)/sqrt(length(e_val)))
+
+e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
+  geom_line()+
+  geom_ribbon(data= e_trend,
+              aes(x=gen,
+                  ymin=e_avg-e_sem,
+                  ymax=e_avg+e_sem),
+              alpha=0.7,
+              inherit.aes = FALSE)+
+  geom_line( data = e_trend,
+             aes(x=gen,
+                 y=e_avg),
+             colour="black",
+             inherit.aes = FALSE)+
+  theme_classic()+
+  ggtitle('E-levels (mean)')+
+  ylab("Energy")+
+  xlab("Generation")+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_line(colour=NA),
+        panel.grid.minor = element_line(color =NA),
+        axis.title = element_text(family = "Arial"),
+        axis.text = element_text( family = "Arial")
+  )+
+  scale_y_continuous(limits=c(0,100), expand=c(0,0)) +
+  scale_x_continuous(expand=c(0,0)) +
+  theme(legend.position = "none")
+e_fig
+```
+
+![](general-model_files/figure-gfm/unnamed-chunk-24-3.png)<!-- -->
+
+``` r
 # 
 # # Panel ----
-# library(patchwork)
-# 
-# history_panel  <-   ((sp_fig | SAD_fig +
-#                         plot_layout(c(2,1))) 
+library(patchwork)
+
+history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
+(history_panel <- history_4 / (SAD_ridge_plot)+
+  plot_layout(heights = c(1,1,2)))
+```
+
+    ## Picking joint bandwidth of 0.107
+
+![](general-model_files/figure-gfm/unnamed-chunk-24-4.png)<!-- -->
+
+``` r
+# history_panel  <-   ((sp_fig | SAD_fig) +
+#                         plot_layout(c(2,1))
 #                      /(div_fig | e_fig) +
-#                        plot_layout(widths = c(1,1))) +
-#   plot_layout(heights =  c(2,1) ) +
+#                        plot_layout(widths = c(1,1))
+#                      /(SAD_ridge_plot)) +
+#   plot_layout(heights =  c(2,1,3) ) +
 #   plot_annotation(tag_levels = 'a')
 # history_panel
 
@@ -841,4 +863,6 @@ sp_fig
 # combined_gif <- image_animate(new_gif)
 # # save as gif
 # image_write(combined_gif, "../animations/imbalance3.gif")
+
+#7. END --------------------------------------------------
 ```

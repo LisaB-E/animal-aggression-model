@@ -5,15 +5,7 @@
 #' output: github_document
 #' ---
 
-#' ## Current structure  
-#' For loop 1 - repeat for each replicate  
-#' -  2. Move  
-#' -  3. Fight - dependent o energy  
-#' -  4. Feed -   
-#' -  5. Reproduce  
-#' -  6. Energy gain/loss  
-#' End FL1 
-#'   
+  
 
 #+ echo = F
 #---- 1. WORKSPACE PREP --------------------------------------------------  
@@ -31,12 +23,12 @@ load.pack = lapply(packages,require,char=T)
 load.pack
 
 #+ echo = F 
-#---- 2. PARAMETERS -----------------------------------------------------  
+#----- 2. PARAMETERS -----------------------------------------------------  
 #' # 2. Parameters  
 
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
-ngenerations  = 100    # No. generations
-replicates    = 10    # No. replicates (first half trans. second half intrans.)
+ngenerations  = 30    # No. generations
+replicates    = 5     # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
 nspecies      = 30    # No. species
@@ -60,21 +52,22 @@ step_moves = c(0,-1,dim-1,dim,dim+1,1,-dim+1,-dim,-dim-1)      #added option to 
 aggression = matrix(0.5, ncol=nspecies, nrow = nspecies)
 diag(aggression) = 0.5 # For interaction between individuals of the same species 
 
-#' Store species richness at each generation
+#' Store species richness at each generation IS THIS NEEDED, CAN'T GET FROM END LISTS?
 rich = data.frame(gen=rep(1:ngenerations,replicates),
                   rep=rep(1:replicates,each=ngenerations),
                   rich=NA,
                   type=NA)
 
-#' Progress bar  *use pb$tick() in for-loop to run*
-
+#' Progress bar 
+#+ results='hide'
 pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
 
 #' unique ID's for each individual
 IDs <- c(1:(nspecies*nindiv*ngenerations*replicates)) #does it matter if this is unique per replicate, or unique throughout? right now unique throughout
 
 #+echo = F
-#---- 3. INITIALISE  ----------------------------------------------------
+#----- 3. INITIALISE  ----------------------------------------------------
+
 #' # 3. Initialise - habitat  
 
 #' Simulate habitat 
@@ -87,40 +80,40 @@ IDs <- c(1:(nspecies*nindiv*ngenerations*replicates)) #does it matter if this is
   hab_vals = as.matrix(cast(hab_bin,
                             x~y,
                             value='hab_bin'))
-#+ habitat.matrix 
-#' ## Plot habitat values
+ 
+#' Plot habitat values
+#+ habitat.matrix
   hab.plot = ggplot(hab_bin) + theme_bw() +
     geom_raster(aes(x,y,fill=hab_bin)) +
-    scale_x_continuous(expand=expand_scale(add=0)) +
-    scale_y_continuous(expand=expand_scale(add=0)) +
+    scale_x_continuous(expand=expansion(add=0)) +
+    scale_y_continuous(expand=expansion(add=0)) +
     theme(legend.position = 'top',
           axis.text=element_blank(),
           axis.title = element_blank(),
           axis.ticks = element_blank())
  hab.plot
-  
-#FIGURE OUT WHIHC LOCS TO KEEP ORIGINAL VS UPDATED...
+
 #' Randomly place individuals of each species in habitat
 locs = cbind(sample(hab_dim,tot_indiv),rep(1:nspecies,each=nindiv))       # Randomly picks locations (V1-cell) for all individuals (V2) 
 locs = cbind(locs,hab_vals[locs[,1]])                                     # habitat value
 
-#' add energetic value
+#' Add energetic value
 locs = cbind(locs,rep(100,nindiv))                                        # starting energetic value =100?
 locs = locs[order(locs[,1]),] 
 
 locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
-OG_locs <- locs
+OG_locs <- locs                                                           # each rep in sim starts with same initialised habitat 
 
 #+ echo=F
-  #----- 4. FUNCTIONS ---------------------------------------------------------  
+#----- 4. FUNCTIONS ---------------------------------------------------------  
 #' # 4. Functions
 #' ### Function - move  
 
 move <- function(){      
   
-  # Place individuals in habitat
+# Place individuals in habitat
   habitat = matrix(0,ncol=dim,nrow=dim)                                # make 100 x 100 matrix
   habitat[locs[,1]] = 1                                                # places individual in the matrix
   
@@ -130,8 +123,8 @@ move <- function(){
                           (hab_dim-dim+1):hab_dim))                    # bottom
   
   
-ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]          # which edge corner cells are occupied
-ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which individuals are on edge corner cells (V2&V1)
+ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]             # which edge corner cells are occupied
+ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which individuals are on edge corner cells (V2&V1)
   offec_indiv <- locs[locs[,1]%in%setdiff(locs[,1],ec_indiv[,1]),]     # individuals  NOT on edge corner cells (V1&v2)
   
   offec_indiv <- cbind(offec_indiv, sample(step_moves, dim(offec_indiv)[1], replace = TRUE)) # add move step to non edge inds (V3)
@@ -140,12 +133,12 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
 #goal: figure out how to do this neater (not sure the if else statements are neede for samppling of the step_moves, surely a dim=1 woudl replace the if TRUE part?)*
   
   ec_indiv_new <- NULL
-  if(sum(ec_indiv[,1]==1)>0){                                         # Q1 find if any inds are in top left corner
-    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                         # VALUE IF TRUE -pull out that data
-    if(is.null(dim(top_left_ind))){                                     # Q2 if top left individual does not exist
-      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))          # VALUE IF TRUE move down, right or diagonal
+  if(sum(ec_indiv[,1]==1)>0){                                          # Q1 find if any inds are in top left corner
+    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                          # VALUE IF TRUE -pull out that data
+    if(is.null(dim(top_left_ind))){                                    # Q2 if top left individual does not exist
+      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))    # VALUE IF TRUE move down, right or diagonal
     }else{                                     
-      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],         # VALUE IF FALSE
+      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],   # VALUE IF FALSE
                                                dim(top_left_ind)[1],r=T))
     }
     ec_indiv_new = rbind(ec_indiv_new,top_left_ind)
@@ -160,7 +153,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,top_right_ind)
   }
-  if(sum(ec_indiv[,1] == dim)>0){                                                     #bottom left
+  if(sum(ec_indiv[,1] == dim)>0){                                                     # bottom left
     bottom_left_ind = ec_indiv[ec_indiv[,1]==dim,]
     if(is.null(dim(bottom_left_ind))){
       bottom_left_ind = c(bottom_left_ind,sample(step_moves[c(1, 2:4)],1))
@@ -170,7 +163,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_left_ind)
   }
-  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom righ
+  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  # bottom right
     bottom_right_ind = ec_indiv[ec_indiv[,1]==hab_dim,]
     if(is.null(dim(bottom_right_ind))){
       bottom_right_ind = c(bottom_right_ind,sample(step_moves[c(1:2,8:9)],1))
@@ -180,7 +173,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_right_ind)
   }
-  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              #left edge
+  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              # left edge
     left_edge_ind = ec_indiv[ec_indiv[,1]%in%(2:(dim-1)),]
     if(is.null(dim(left_edge_ind))){
       left_edge_ind = c(left_edge_ind,sample(step_moves[c(1,2:6)],1))
@@ -190,7 +183,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,left_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             #right edge
+  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                            # right edge
     right_edge_ind = ec_indiv[ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)),]
     if(is.null(dim(right_edge_ind))){
       right_edge_ind = c(right_edge_ind,sample(step_moves[c(1:2,6:9)],1))
@@ -200,7 +193,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,right_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        #top edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){      # top edge
     top_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),
                                                     c(1,hab_dim-dim+1)),]
     if(is.null(dim(top_edge_ind))){
@@ -211,7 +204,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,top_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){                #bottom edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){          # bottom edge
     bottom_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),
                                                        c(dim,hab_dim)),]
     if(is.null(dim(bottom_edge_ind))){
@@ -222,7 +215,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_edge_ind)
     
-  }                                                                       #end find edge individs section
+  }                                                                                     # end find edge individs section
   
 # move 
 rownames(ec_indiv_new) = NULL
@@ -238,7 +231,7 @@ locs_new = locs_new[order(locs_new[,1]),]
 
 gen <- rep(generation, nrow(locs_new))                                # output cleanup 
 repl <- rep(replic, nrow(locs_new)) 
-locs_new <- cbind(locs_new, gen, repl)                               # add generation number V6, repl V7
+locs_new <- cbind(locs_new, gen, repl)                                # add generation number V6, repl V7
 
 # Getting x & y coords for animation
 temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                          # make 100 x 100 matrix
@@ -256,9 +249,9 @@ for (dupe in 1:nrow(temp_dupes)) {
   triple_threat_list[[dupe]] <- temp_coordsX
 }
 
-temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
-temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
-temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
+temp_coords2 <- do.call(rbind,triple_threat_list)                     # extract each list
+temp_coords <- rbind(temp_coords1, temp_coords2)                      # merge coords inclduing dupes
+temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]  # reorder
 locs_new <- cbind(locs_new, temp_coords)
 
 return(locs_new)                                                        
@@ -269,11 +262,12 @@ return(locs_new)
 #' ### Function - fight
 
 fight <- function(){
-  locs_new <- locs     #pulls from move endpoint in sim                 
-  # Interacting species are those occupying the same cell 
-  loc_ind <- locs_new[,1]                                                 # extracts cell locations
-  int_loc <- loc_ind[duplicated(loc_ind)]                                 # extracts duplicated values from new locations (ie where individuals meet)
-  fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
+  locs_new <- locs                                                    # pulls from move endpoint in sim                 
+  
+# Interacting species are those occupying the same cell 
+  loc_ind <- locs_new[,1]                                             # extracts cell locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                             # extracts cell contains multiple individuals ('fighters')
+  fighters <- locs_new[locs_new[,1]%in%int_loc,]                      # extracts values for fighters
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
   
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
@@ -281,7 +275,8 @@ fight <- function(){
  
   # Roulette selection for winners
   all_winners = NULL
- 
+
+  # fight in pairs 
   for(i in unique(fighters[,1])){
     sp_in_cell <- fighters[fighters[,1]==i,]                             # extracts info about fighters in same cell
     win_vect = rep(0,length(sp_in_cell[,2]))                             # creates vector for the number of fighting indiviuals in cell
@@ -317,15 +312,15 @@ fight <- function(){
       rowcount = 0
       rowsum = 0
                                                           
-      while(rowsum!=5){                                                 # 5 = all cells matches with the loser
+      while(rowsum!=5){                                                  # 5 = all cells matches with the loser
         rowcount = rowcount+1
-        rowsum = sum(sp_in_cell[rowcount,] == loser)                    # checks whether top row = loser
+        rowsum = sum(sp_in_cell[rowcount,] == loser)                     # checks whether top row = loser
       }
-       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                       # removes loser from sp in cell
+       sp_in_cell = sp_in_cell[-rowcount,,drop=F]                        # removes loser from sp in cell
       }      
-      }                                                                 # loops back to next fightJ
+      }                                                                  # loops back to next fightJ
     
-    initial = fighters[fighters[,1]==i,]                                # identifies starting individs in cell (.ie OG sp_in_cell)
+    initial = fighters[fighters[,1]==i,]                                 # identifies starting individs in cell (.ie OG sp_in_cell)
    
 # identify which individ is winner to add to win_vect tally
    if(nrow(sp_in_cell)>0) {                                              # if all were low energy
@@ -333,20 +328,20 @@ fight <- function(){
     rowsum = 0
     while(rowsum!=5){                                 
       rowcount = rowcount + 1
-      rowsum = sum(initial[rowcount,] == sp_in_cell)                    # finds winner in sp_in_cell
+      rowsum = sum(initial[rowcount,] == sp_in_cell)                     # finds winner in sp_in_cell
     }
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
    }
     all_winners = c(all_winners,win_vect)
-    }                                                                   #loops back to next cell with multiples
-  fighters = cbind(fighters,all_winners)                               # merges 
+    }                                                                    # loops back to next cell with multiples
+  fighters = cbind(fighters,all_winners)                                 # merges 
   
- # Lose energy
-  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
-  winners = fighters[fighters[,6]==1, , drop=FALSE]                                   # Differentiate winners and losers 
+# Lose energy post fight
+  fighters[,4] = fighters[,4]-fight_eloss                                # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
+  winners = fighters[fighters[,6]==1, , drop=FALSE]                      # Differentiate winners and losers 
   losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
-  losers = losers[losers[,4]>0, ,drop=FALSE]                                       # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
+  losers = losers[losers[,4]>0, ,drop=FALSE]                             # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
 
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
@@ -373,9 +368,7 @@ fight <- function(){
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
 
-
-  
-
+# save data
   gen <- rep(generation, nrow(locs_new))
   # Store gen (WARNING - change 1 to generation, replic)
   repl <- rep(replic, nrow(locs_new))
@@ -387,9 +380,9 @@ fight <- function(){
 
   
 
-#---- 5. SIMULATE -----------------------------------------------------------------  
+#----- 5. SIMULATE -----------------------------------------------------------------  
 #' # 5. Simulate
-
+#+ results = 'hide'
 loop=0
 list_move=list()                                                      
 list_fight=list()
@@ -397,25 +390,23 @@ list_abund=list()
 list_rich = list()
 move_hist = tibble()
 
-## for trouible shooting - delet when done
 
-######
-#replication loop
+# start replication loop
 for (replic in 1:replicates) { 
 locs <- OG_locs #reset to starting point - is this right level of replication?
 
-#generation loop
+# start timestep loop
 for(generation in 1:ngenerations){
   gen_rep <- paste("G",generation,"R",replic, sep = "_")
   loop = loop + 1
   
-# Move 
+# *Move*
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
   list_move[[gen_rep]] <- after_move       # stores moves per generation as list
 # print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
-# Fight
+# *Fight*
   after_fight <- fight()                      # after_fight = locs_new
 # print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
@@ -451,8 +442,8 @@ move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each
 
 
 }                                             # end rep
-
 close(pb)
+
 
 test_move_hist <- move_hist %>% 
   group_by(gen, repl) %>% 
@@ -460,14 +451,15 @@ test_move_hist <- move_hist %>%
 
 #to do next, figure out why species are disapreading between gens - locs_new has 1-100, but output is reduced to 7 species, what's goin on there? The dataset is somehow cropped to only incldue whatever species make it through to gen100... must be an issue with the reps vs generations? figure out that looping to figure out what is goin on...
 
-#---- 6. VISUALISE ----
+#----- 6. VISUALISE --------------------------------------------------
 #can get rid of U_ID?
 
   # Movement ----
 random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs
 sub_movers <- subset(move_hist, U_ID %in% c(random_select))
 
-movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
+#+ movement.plot
+(movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
   geom_raster(aes(fill=hab_bin), alpha=0.7) +
   scale_fill_gradient( low="grey10", high="grey5") +
   geom_point(data=sub_movers, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
@@ -485,9 +477,8 @@ movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
   # theme_dark()+
   theme(legend.position="none")+
  # labs(title = "Generation {previous_state} of 20" )+
-  coord_fixed()
+  coord_fixed())
 
-movement_fig
 
 # Sp. Abundance ----
 sp_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
@@ -686,14 +677,14 @@ history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
 
 
 
-history_panel  <-   ((sp_fig | SAD_fig) +
-                        plot_layout(c(2,1))
-                     /(div_fig | e_fig) +
-                       plot_layout(widths = c(1,1))
-                     /(SAD_ridge_plot)) +
-  plot_layout(heights =  c(2,1,3) ) +
-  plot_annotation(tag_levels = 'a')
-history_panel
+# history_panel  <-   ((sp_fig | SAD_fig) +
+#                         plot_layout(c(2,1))
+#                      /(div_fig | e_fig) +
+#                        plot_layout(widths = c(1,1))
+#                      /(SAD_ridge_plot)) +
+#   plot_layout(heights =  c(2,1,3) ) +
+#   plot_annotation(tag_levels = 'a')
+# history_panel
 
 # Animate ----
 # movement_animation <- movement_fig +
@@ -728,7 +719,7 @@ history_panel
 # # save as gif
 # image_write(combined_gif, "../animations/imbalance3.gif")
 
-
+#7. END --------------------------------------------------
 
 
 
