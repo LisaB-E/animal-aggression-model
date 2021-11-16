@@ -35,8 +35,8 @@ load.pack
 #' # 2. Parameters  
 
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
-ngenerations  = 100    # No. generations
-replicates    = 10    # No. replicates (first half trans. second half intrans.)
+ngenerations  = 150    # No. generations
+replicates    = 20    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
 nspecies      = 30    # No. species
@@ -60,7 +60,7 @@ step_moves = c(0,-1,dim-1,dim,dim+1,1,-dim+1,-dim,-dim-1)      #added option to 
 aggression = matrix(0.5, ncol=nspecies, nrow = nspecies)
 diag(aggression) = 0.5 # For interaction between individuals of the same species 
 
-#' Store species richness at each generation
+#' Store species richness at each generation IS THIS NEEDED, CAN'T GET FROM END LISTS?
 rich = data.frame(gen=rep(1:ngenerations,replicates),
                   rep=rep(1:replicates,each=ngenerations),
                   rich=NA,
@@ -111,7 +111,7 @@ locs = locs[order(locs[,1]),]
 locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
-OG_locs <- locs
+OG_locs <- locs                                                           # so that each rep starts with same initialised habitat 
 
 #+ echo=F
   #----- 4. FUNCTIONS ---------------------------------------------------------  
@@ -130,8 +130,8 @@ move <- function(){
                           (hab_dim-dim+1):hab_dim))                    # bottom
   
   
-ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]          # which edge corner cells are occupied
-ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which individuals are on edge corner cells (V2&V1)
+ec_occ      <- edge_corner[which(habitat[edge_corner]==1)]             # which edge corner cells are occupied
+ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which individuals are on edge corner cells (V2&V1)
   offec_indiv <- locs[locs[,1]%in%setdiff(locs[,1],ec_indiv[,1]),]     # individuals  NOT on edge corner cells (V1&v2)
   
   offec_indiv <- cbind(offec_indiv, sample(step_moves, dim(offec_indiv)[1], replace = TRUE)) # add move step to non edge inds (V3)
@@ -140,12 +140,12 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
 #goal: figure out how to do this neater (not sure the if else statements are neede for samppling of the step_moves, surely a dim=1 woudl replace the if TRUE part?)*
   
   ec_indiv_new <- NULL
-  if(sum(ec_indiv[,1]==1)>0){                                         # Q1 find if any inds are in top left corner
-    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                         # VALUE IF TRUE -pull out that data
-    if(is.null(dim(top_left_ind))){                                     # Q2 if top left individual does not exist
-      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))          # VALUE IF TRUE move down, right or diagonal
+  if(sum(ec_indiv[,1]==1)>0){                                          # Q1 find if any inds are in top left corner
+    top_left_ind = ec_indiv[ec_indiv[,1]==1,]                          # VALUE IF TRUE -pull out that data
+    if(is.null(dim(top_left_ind))){                                    # Q2 if top left individual does not exist
+      top_left_ind = c(top_left_ind,sample(step_moves[c(1,4:6)],1))    # VALUE IF TRUE move down, right or diagonal
     }else{                                     
-      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],         # VALUE IF FALSE
+      top_left_ind = cbind(top_left_ind,sample(step_moves[c(1,4:6)],   # VALUE IF FALSE
                                                dim(top_left_ind)[1],r=T))
     }
     ec_indiv_new = rbind(ec_indiv_new,top_left_ind)
@@ -170,7 +170,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_left_ind)
   }
-  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom righ
+  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom right
     bottom_right_ind = ec_indiv[ec_indiv[,1]==hab_dim,]
     if(is.null(dim(bottom_right_ind))){
       bottom_right_ind = c(bottom_right_ind,sample(step_moves[c(1:2,8:9)],1))
@@ -180,7 +180,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_right_ind)
   }
-  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              #left edge
+  if(sum(ec_indiv[,1]%in%(2:(dim-1)))>0){                                              # left edge
     left_edge_ind = ec_indiv[ec_indiv[,1]%in%(2:(dim-1)),]
     if(is.null(dim(left_edge_ind))){
       left_edge_ind = c(left_edge_ind,sample(step_moves[c(1,2:6)],1))
@@ -190,7 +190,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,left_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             #right edge
+  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             # right edge
     right_edge_ind = ec_indiv[ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)),]
     if(is.null(dim(right_edge_ind))){
       right_edge_ind = c(right_edge_ind,sample(step_moves[c(1:2,6:9)],1))
@@ -200,7 +200,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,right_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        #top edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        # top edge
     top_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),
                                                     c(1,hab_dim-dim+1)),]
     if(is.null(dim(top_edge_ind))){
@@ -211,7 +211,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,top_edge_ind)
   }
-  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){                #bottom edge
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){            # bottom edge
     bottom_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),
                                                        c(dim,hab_dim)),]
     if(is.null(dim(bottom_edge_ind))){
@@ -222,7 +222,7 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]              # which indiv
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_edge_ind)
     
-  }                                                                       #end find edge individs section
+  }                                                                                       # end find edge individs section
   
 # move 
 rownames(ec_indiv_new) = NULL
@@ -258,7 +258,7 @@ for (dupe in 1:nrow(temp_dupes)) {
 
 temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
 temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
-temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]     # reorder
+temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]   # reorder
 locs_new <- cbind(locs_new, temp_coords)
 
 return(locs_new)                                                        
@@ -269,10 +269,11 @@ return(locs_new)
 #' ### Function - fight
 
 fight <- function(){
-  locs_new <- locs     #pulls from move endpoint in sim                 
+  locs_new <- locs                                                      # pulls from move endpoint in sim                 
+  
   # Interacting species are those occupying the same cell 
-  loc_ind <- locs_new[,1]                                                 # extracts cell locations
-  int_loc <- loc_ind[duplicated(loc_ind)]                                 # extracts duplicated values from new locations (ie where individuals meet)
+  loc_ind <- locs_new[,1]                                               # extracts cell locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                               # extracts cell contains multiple individuals ('fighters')
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
   
@@ -339,14 +340,14 @@ fight <- function(){
    }
     all_winners = c(all_winners,win_vect)
     }                                                                   #loops back to next cell with multiples
-  fighters = cbind(fighters,all_winners)                               # merges 
+  fighters = cbind(fighters,all_winners)                                # merges 
   
  # Lose energy
-  fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
-  winners = fighters[fighters[,6]==1, , drop=FALSE]                                   # Differentiate winners and losers 
+  fighters[,4] = fighters[,4]-fight_eloss                               # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
+  winners = fighters[fighters[,6]==1, , drop=FALSE]                      # Differentiate winners and losers 
   losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
-  losers = losers[losers[,4]>0, ,drop=FALSE]                                       # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
+  losers = losers[losers[,4]>0, ,drop=FALSE]                             # deletes dead individuals (energy =0). I wonder if there should alos be random mortality in these guys?
 
   # Combines winner with those who didn't engage in aggression (i.e. were sole occupants of cell)
   locs_new = cbind(locs_new,all_winners=1)
@@ -397,7 +398,6 @@ list_abund=list()
 list_rich = list()
 move_hist = tibble()
 
-## for trouible shooting - delet when done
 
 ######
 #replication loop
