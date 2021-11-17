@@ -27,8 +27,11 @@ load.pack
 #' # 2. Parameters  
 
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
+
 ngenerations  = 30    # No. generations
 replicates    = 5     # No. replicates (first half trans. second half intrans.)
+ngenerations  = 150    # No. generations
+replicates    = 20    # No. replicates (first half trans. second half intrans.)
 dim           = 100   # dimension of square habitat array
 hab_dim       = dim^2 # total no. cells
 nspecies      = 30    # No. species
@@ -104,7 +107,11 @@ locs = locs[order(locs[,1]),]
 locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
+
 OG_locs <- locs                                                           # each rep in sim starts with same initialised habitat 
+
+OG_locs <- locs                                                           # so that each rep starts with same initialised habitat 
+
 
 #+ echo=F
 #----- 4. FUNCTIONS ---------------------------------------------------------  
@@ -163,7 +170,9 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which i
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_left_ind)
   }
+
   if(sum(ec_indiv[,1] == hab_dim)>0){                                                  # bottom right
+  if(sum(ec_indiv[,1] == hab_dim)>0){                                                  #bottom right
     bottom_right_ind = ec_indiv[ec_indiv[,1]==hab_dim,]
     if(is.null(dim(bottom_right_ind))){
       bottom_right_ind = c(bottom_right_ind,sample(step_moves[c(1:2,8:9)],1))
@@ -183,7 +192,11 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which i
     }
     ec_indiv_new = rbind(ec_indiv_new,left_edge_ind)
   }
+
   if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                            # right edge
+
+  if(sum(ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)))>0){                             # right edge
+
     right_edge_ind = ec_indiv[ec_indiv[,1]%in%((hab_dim-dim+2):(hab_dim-1)),]
     if(is.null(dim(right_edge_ind))){
       right_edge_ind = c(right_edge_ind,sample(step_moves[c(1:2,6:9)],1))
@@ -193,7 +206,11 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which i
     }
     ec_indiv_new = rbind(ec_indiv_new,right_edge_ind)
   }
+
   if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){      # top edge
+
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),c(1,hab_dim-dim+1)))>0){        # top edge
+
     top_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==1),
                                                     c(1,hab_dim-dim+1)),]
     if(is.null(dim(top_edge_ind))){
@@ -204,7 +221,11 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which i
     }
     ec_indiv_new = rbind(ec_indiv_new,top_edge_ind)
   }
+
   if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){          # bottom edge
+
+  if(sum(ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),c(dim,hab_dim)))>0){            # bottom edge
+
     bottom_edge_ind = ec_indiv[ec_indiv[,1]%in%setdiff(which(1:hab_dim%%dim==0),
                                                        c(dim,hab_dim)),]
     if(is.null(dim(bottom_edge_ind))){
@@ -215,7 +236,11 @@ ec_indiv    <- locs[locs[,1]%in%ec_occ, , drop=FALSE]                  # which i
     }
     ec_indiv_new = rbind(ec_indiv_new,bottom_edge_ind)
     
+
   }                                                                                     # end find edge individs section
+
+  }                                                                                       # end find edge individs section
+
   
 # move 
 rownames(ec_indiv_new) = NULL
@@ -249,9 +274,15 @@ for (dupe in 1:nrow(temp_dupes)) {
   triple_threat_list[[dupe]] <- temp_coordsX
 }
 
+
 temp_coords2 <- do.call(rbind,triple_threat_list)                     # extract each list
 temp_coords <- rbind(temp_coords1, temp_coords2)                      # merge coords inclduing dupes
 temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]  # reorder
+
+temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
+temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
+temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]   # reorder
+
 locs_new <- cbind(locs_new, temp_coords)
 
 return(locs_new)                                                        
@@ -262,12 +293,21 @@ return(locs_new)
 #' ### Function - fight
 
 fight <- function(){
+
   locs_new <- locs                                                    # pulls from move endpoint in sim                 
   
 # Interacting species are those occupying the same cell 
   loc_ind <- locs_new[,1]                                             # extracts cell locations
   int_loc <- loc_ind[duplicated(loc_ind)]                             # extracts cell contains multiple individuals ('fighters')
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                      # extracts values for fighters
+
+  locs_new <- locs                                                      # pulls from move endpoint in sim                 
+  
+  # Interacting species are those occupying the same cell 
+  loc_ind <- locs_new[,1]                                               # extracts cell locations
+  int_loc <- loc_ind[duplicated(loc_ind)]                               # extracts cell contains multiple individuals ('fighters')
+  fighters <- locs_new[locs_new[,1]%in%int_loc,]                          # extracts values for fighters
+
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
   
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
@@ -333,11 +373,19 @@ fight <- function(){
     win_vect[rowcount] = 1                                               # changes 0 to 1 in win vs lose column
    }
     all_winners = c(all_winners,win_vect)
+
     }                                                                    # loops back to next cell with multiples
   fighters = cbind(fighters,all_winners)                                 # merges 
   
 # Lose energy post fight
   fighters[,4] = fighters[,4]-fight_eloss                                # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
+
+    }                                                                   #loops back to next cell with multiples
+  fighters = cbind(fighters,all_winners)                                # merges 
+  
+ # Lose energy
+  fighters[,4] = fighters[,4]-fight_eloss                               # Aggression is energetically expensive DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE  IN AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER?? also, why arwe there two of these, once before and once after?
+
   winners = fighters[fighters[,6]==1, , drop=FALSE]                      # Differentiate winners and losers 
   losers = fighters[fighters[,6]==0, ,drop=FALSE]
   
