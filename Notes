@@ -42,5 +42,19 @@ Reproduction:
 - offspring start in parent cell - wait does that then trigger higher risk for competition?!
 
 
--
+Meeting November '21
+
+- Figure out parallel computing, using multiple cores, or HPC to run final simulation
+- Change to timesteps, not generations
+- Make reproduction more rare, every x timestep
+- Reinitiate haibaitat too every time
+- Change sp. diversity/abundance figs to show all reps, not mean
+- Add feeding to model
+- Figure out habitat clustering, use empirical data if possible, sensitivity test
+- Initialise with same SAD as empirical data
+- Add habitat quality influencing aggresison factor
+- ration of energies, feed vs fight vs aggresion vs repordutcon etc --> energy budgets!
+- repro should be limited for low energy individuals...
+- moving should have cost too?
+- 
 
