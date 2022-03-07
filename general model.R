@@ -29,7 +29,7 @@ load.pack
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
 
 #simulation
-ngenerations  = 1000    # No. generations
+ngenerations  = 100    # No. generations
 replicates    = 5     # No. replicates (first half trans. second half intrans.)
 
 #initialisation
@@ -42,11 +42,13 @@ tot_indiv     = nspecies*nindiv # Total individuals
 #energy
 #e-value of repro>feed>aggro>somatic>
 
-eloss         = 10    # Time-step energy loss (ie somatic growth)
+
+e_feed        = 100    # energy gain from habitat factor
+eloss         = e_feed * 0.98     #[DEB] # Time-step energy loss (ie somatic growth)
 fight_eloss   = 20    # Energy loss from aggression
-offspring_pen = 2     # factor by which to scale offspring energy
-repro_pen     = 40    # energy loss from reproduction
-e_feed        = 30    # energy gain from habitat factor
+offspring_pen = (4*10^-6)*e_feed  #[DEB]   # factor by which to scale offspring energy 
+repro_pen     = 0.02*e_feed   #[DEB]  # energy loss from reproduction
+
 
 #aggression
 exp_fight     = 20    # Roulette selection exponent
@@ -125,7 +127,6 @@ colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
 
 OG_locs <- locs                                                           # each rep in sim starts with same initialised habitat 
 
-OG_locs <- locs                                                           # so that each rep starts with same initialised habitat 
 
 
 #+ echo=F
@@ -268,20 +269,19 @@ temp_habitat1[locs_new[,1]] = 1                                       # place in
 temp_coords1 <- which(temp_habitat1>0, arr.ind=TRUE)                  # get x & y coords
 
 triple_threat_list <- list()                                          # get duplicates, including triples etc
-triple_threat_list <- NULL
 temp_dupes <- matrix(locs_new[,1][duplicated(locs_new[,1], fromLast = TRUE)])
   
 for (dupe in 1:nrow(temp_dupes)) {
+  if(nrow(temp_dupes)==0) {                                           #for cases where there are no duplicates
+    triple_threat_list <- list()
+  } else {
   temp_habitat <- matrix(0,ncol=dim,nrow=dim)
   temp_habitat[temp_dupes[dupe,1 ]] = 1
   temp_coordsX <- which(temp_habitat>0, arr.ind=TRUE)
   triple_threat_list[[dupe]] <- temp_coordsX
-}
+}}
 
 
-temp_coords2 <- do.call(rbind,triple_threat_list)                     # extract each list
-temp_coords <- rbind(temp_coords1, temp_coords2)                      # merge coords inclduing dupes
-temp_coords <- temp_coords[order(temp_coords[,2], temp_coords[,1]),]  # reorder
 
 temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
 temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
@@ -402,7 +402,7 @@ fight <- function(){
                               (1+b*exp(-v*locs_new[,4]))))               # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
   offspring = locs_new[locs_new[,7]==1, , drop=F]
   offspring[,5] = IDs[1:nrow(offspring)]                                 # give unique ID
-  offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents
+  offspring[,4] = offspring[,4]*offspring_pen                            # Set offspring energy to 50% of parents [CHANGED TO DEB THEORY, * instead of /]
   
   locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
   locs_new = locs_new[order(locs_new[,1]),]
@@ -440,7 +440,7 @@ for(generation in 1:ngenerations){
 # *Move*
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
-  list_move[[gen_rep]] <- after_move       # stores moves per generation as list
+  list_move[[gen_rep]] <- after_move          # stores moves per generation as list
 # print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
   
 # *Fight*
@@ -481,12 +481,15 @@ move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each
 }                                             # end rep
 close(pb)
 
+#exploring model output
 
-test_move_hist <- move_hist %>% 
+#number of individuals per gen & rep
+hist_sp <- move_hist %>% 
   group_by(gen, repl) %>% 
-  summarise(n=length(sp))
+  dplyr::summarise(n.inds=length(unique(U_ID)),
+                   n.sp = length(unique(sp)))
 
-#to do next, figure out why species are disapreading between gens - locs_new has 1-100, but output is reduced to 7 species, what's goin on there? The dataset is somehow cropped to only incldue whatever species make it through to gen100... must be an issue with the reps vs generations? figure out that looping to figure out what is goin on...
+
 
 #----- 6. VISUALISE --------------------------------------------------
 #can get rid of U_ID?
@@ -594,7 +597,7 @@ plot(mean_rad)
 #' Plotting manually
 #' 
 #+ SAD_mean
-SAD_fig <- ggplot(data = SAD_data, aes(x = log(mean_abund))) +
+SAD_fig <- ggplot(data = SAD_mean, aes(x = n)) +
   geom_histogram(binwidth = 0.147)+ #logged
   # geom_histogram(binwidth =4.2)+
   geom_density(colour="red")+
@@ -620,7 +623,7 @@ SAD_fig
 #' as a ridgeline plot
 
 library(ggridges)
-gen_filter <- c(1, seq(from = 100, to=ngenerations, by = 100))
+gen_filter <- c(1, seq(from = 10, to=ngenerations, by = 10))
   
 SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   group_by(sp, gen) %>% 
@@ -724,7 +727,7 @@ history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
 history_panel <- history_4 / (SAD_ridge_plot)+
   plot_layout(heights = c(1,1,2))
 
-ggsave('model_output.png', bg = 'transparent')
+ggsave('model_output_7mar.png', bg = 'transparent')
 
 
 # history_panel  <-   ((sp_fig | SAD_fig) +
