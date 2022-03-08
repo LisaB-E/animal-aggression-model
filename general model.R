@@ -18,7 +18,7 @@ rm(list=ls())
 #+ packages, message=F, results='hide'
 packages = c('tidyverse', 'reshape','gstat','ggplot2',
              'viridis','tictoc', 'progress',
-             'dplyr', 'gganimate')
+             'dplyr', 'gganimate', 'patchwork', 'ggpmisc')
 load.pack = lapply(packages,require,char=T)
 load.pack
 
@@ -29,7 +29,7 @@ load.pack
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
 
 #simulation
-ngenerations  = 100    # No. generations
+n.timestep  = 100    # No. timesteps
 replicates    = 5     # No. replicates (first half trans. second half intrans.)
 
 #initialisation
@@ -43,12 +43,11 @@ tot_indiv     = nspecies*nindiv # Total individuals
 #e-value of repro>feed>aggro>somatic>
 
 
-e_feed        = 100    # energy gain from habitat factor
-eloss         = e_feed * 0.98     #[DEB] # Time-step energy loss (ie somatic growth)
+eloss         = 10    # Time-step energy loss (ie somatic growth)
 fight_eloss   = 20    # Energy loss from aggression
-offspring_pen = (4*10^-6)*e_feed  #[DEB]   # factor by which to scale offspring energy 
-repro_pen     = 0.02*e_feed   #[DEB]  # energy loss from reproduction
-
+offspring_pen = 2     # factor by which to scale offspring energy
+repro_pen     = 40    # energy loss from reproduction
+e_feed        = 30    # energy gain from habitat factor
 
 #aggression
 exp_fight     = 20    # Roulette selection exponent
@@ -71,18 +70,18 @@ step_moves = c(0,-1,dim-1,dim,dim+1,1,-dim+1,-dim,-dim-1)      #added option to 
 aggression = matrix(0.5, ncol=nspecies, nrow = nspecies)
 diag(aggression) = 0.5 # For interaction between individuals of the same species 
 
-#' Store species richness at each generation IS THIS NEEDED, CAN'T GET FROM END LISTS?
-rich = data.frame(gen=rep(1:ngenerations,replicates),
-                  rep=rep(1:replicates,each=ngenerations),
+#' Store species richness at each timestep IS THIS NEEDED, CAN'T GET FROM END LISTS?
+rich = data.frame(ts=rep(1:n.timestep,replicates),
+                  rep=rep(1:replicates,each=n.timestep),
                   rich=NA,
                   type=NA)
 
 #' Progress bar 
 #+ results='hide'
-pb <- txtProgressBar(min = 0, max = replicates*ngenerations, style = 3)
+pb <- txtProgressBar(min = 0, max = replicates*n.timestep, style = 3)
 
 #' unique ID's for each individual
-IDs <- c(1:(nspecies*nindiv*ngenerations*replicates)) #does it matter if this is unique per replicate, or unique throughout? right now unique throughout
+IDs <- c(1:(nspecies*nindiv*n.timestep*replicates)) #does it matter if this is unique per replicate, or unique throughout? right now unique throughout
 
 #+echo = F
 #----- 3. INITIALISE  ----------------------------------------------------
@@ -259,9 +258,9 @@ locs_new[,1] = locs_new[,1] + locs_new[,6]                            # add move
 locs_new[,3] = hab_vals[locs_new[,1]]                                 # get hab vals for new cells
 locs_new = locs_new[order(locs_new[,1]),]  
 
-gen <- rep(generation, nrow(locs_new))                                # output cleanup 
+ts <- rep(timestep, nrow(locs_new))                                # output cleanup 
 repl <- rep(replic, nrow(locs_new)) 
-locs_new <- cbind(locs_new, gen, repl)                                # add generation number V6, repl V7
+locs_new <- cbind(locs_new, ts, repl)                                # add timestep number V6, repl V7
 
 # Getting x & y coords for animation
 temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                          # make 100 x 100 matrix
@@ -269,6 +268,8 @@ temp_habitat1[locs_new[,1]] = 1                                       # place in
 temp_coords1 <- which(temp_habitat1>0, arr.ind=TRUE)                  # get x & y coords
 
 triple_threat_list <- list()                                          # get duplicates, including triples etc
+
+triple_threat_list <- NULL
 temp_dupes <- matrix(locs_new[,1][duplicated(locs_new[,1], fromLast = TRUE)])
   
 for (dupe in 1:nrow(temp_dupes)) {
@@ -280,8 +281,6 @@ for (dupe in 1:nrow(temp_dupes)) {
   temp_coordsX <- which(temp_habitat>0, arr.ind=TRUE)
   triple_threat_list[[dupe]] <- temp_coordsX
 }}
-
-
 
 temp_coords2 <- do.call(rbind,triple_threat_list)                      # extract each list
 temp_coords <- rbind(temp_coords1, temp_coords2)                       # merge coords inclduing dupes
@@ -397,25 +396,38 @@ fight <- function(){
                              (1+b*exp(-v*locs_new[,4]))))                # Death = Bernoulli trial w probability logistically dependent on current energy
   locs_new = locs_new[mort,]
   
-# Reproduction 
-  locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/
-                              (1+b*exp(-v*locs_new[,4]))))               # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
-  offspring = locs_new[locs_new[,7]==1, , drop=F]
-  offspring[,5] = IDs[1:nrow(offspring)]                                 # give unique ID
-  offspring[,4] = offspring[,4]*offspring_pen                            # Set offspring energy to 50% of parents [CHANGED TO DEB THEORY, * instead of /]
-  
-  locs_new = rbind(locs_new[,1:5],offspring[,1:5],losers[,1:5])          # Combines all after fight, feed, death, reproduction
+  locs_new = rbind(locs_new[,1:5],losers[,1:5])          # Combines all after fight, feed, death
   locs_new = locs_new[order(locs_new[,1]),]
 
 # save data
-  gen <- rep(generation, nrow(locs_new))
-  # Store gen (WARNING - change 1 to generation, replic)
+  ts <- rep(timestep, nrow(locs_new))
+  # Store ts (WARNING - change 1 to timestep, replic)
   repl <- rep(replic, nrow(locs_new))
-  locs_new <- cbind(locs_new, gen,repl)  
+  locs_new <- cbind(locs_new, ts,repl)  
   
     return(locs_new)
   
-  }
+}
+
+reproduct <- function(){
+  locs_new <- locs                                                     # pulls from fight endpoint in sim 
+# Reproduction 
+locs_new = cbind(locs_new,rbinom(dim(locs_new)[1],1,a_rep/
+                                   (1+b*exp(-v*locs_new[,4]))))        # Reproduction is Bernouilli trail dependent on current energy levels. READ INTO THIS
+offspring = locs_new[locs_new[,7]==1, , drop=F]
+offspring[,5] = IDs[1:nrow(offspring)]                                 # give unique ID
+offspring[,4] = offspring[,4]/offspring_pen                            # Set offspring energy to 50% of parents [CHANGED TO DEB THEORY, * instead of /]
+
+locs_new = rbind(locs_new[,1:5],offspring[,1:5])          # Combines all after fight, feed, death, reproduction
+locs_new = locs_new[order(locs_new[,1]),]
+
+# save data
+ts <- rep(timestep, nrow(locs_new))
+# Store ts (WARNING - change 1 to timestep, replic)
+repl <- rep(replic, nrow(locs_new))
+locs_new <- cbind(locs_new, ts,repl)  
+return(locs_new)
+}
 
 #----- 5. SIMULATE -----------------------------------------------------------------  
 #' # 5. Simulate
@@ -431,49 +443,57 @@ move_hist = tibble()
 # start replication loop
 for (replic in 1:replicates) { 
 locs <- OG_locs #reset to starting point - is this right level of replication?
-
+day = 0
 # start timestep loop
-for(generation in 1:ngenerations){
-  gen_rep <- paste("G",generation,"R",replic, sep = "_")
+for(timestep in 1:n.timestep){
   loop = loop + 1
+  ts_rep <- paste("TS",timestep,"R",replic, sep = "_")
   
 # *Move*
   after_move <- move()                        # after_move = new_locs
   locs = after_move[,1:5]                     # updates locs to endpoint (final timestep) 
-  list_move[[gen_rep]] <- after_move          # stores moves per generation as list
-# print(paste('move_',' gen', generation, ' rep', replic, ' DONE', sep = ""))
+  list_move[[ts_rep]] <- after_move          # stores moves per timestep as list
+# print(paste('move_',' ts', timestep, ' rep', replic, ' DONE', sep = ""))
   
 # *Fight*
   after_fight <- fight()                      # after_fight = locs_new
-# print(paste('fight_','gen', generation, ', rep', replic, ' DONE', sep = ""))
+# print(paste('fight_','ts', timestep, ', rep', replic, ' DONE', sep = ""))
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
-  IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available
-  
+  IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available IS THIS HAPPENIGN TWICE, IS THAT WHY WE RUN OUT OF INDS?
+
+# *reproduction * 
+  day=day+1
+  day.yr=day-(365*floor(day/365))
+  while (day.yr==(5*30) ||day.yr==(6*30) || day.yr==(6*30)) {#may=5, june=6, july=7
+  after_repr <- reproduct()
+  locs <- after_repr[,1:5]                   # updates locs to endpoint (final timestep) 
+  IDs <- setdiff(IDs,locs[,5])     
+  }
   rich <- length(unique(locs[,2]))            # No species
-  list_rich[[gen_rep]] <- rich
+  list_rich[[ts_rep]] <- rich
  
   locs.df <-data.frame(locs)                  # Abundance
   locs.df$sp <- as.factor(locs.df$sp)
   abund <- locs.df %>%
     group_by(sp) %>%
     tally() %>%
-    mutate(gen = generation,
+    mutate(ts = timestep,
            rep = replic)#;
-  list_abund[[gen_rep]] <- abund           # stores abundance after fight per generation as list (move down)
+  list_abund[[ts_rep]] <- abund           # stores abundance after fight per timestep as list (move down)
  
-   #SOMETHING IS WRONG HERE -- THE FINAL LIST IS CUT DOWN TO ONLY THOSE SPECIES REMAINING AT GEN 100...
+   #SOMETHING IS WRONG HERE -- THE FINAL LIST IS CUT DOWN TO ONLY THOSE SPECIES REMAINING AT ts 100...
   
-  list_fight[[gen_rep]] <- after_fight     # stores outcomes from fights per generation as list
+  list_fight[[ts_rep]] <- after_fight     # stores outcomes from fights per timestep as list
   
   setTxtProgressBar(pb, loop)
-   }                                          # end gen
+   }                                          # end ts
 
 #save move data #WHY IS THIS ONE THE ONLY ONE THAT GETS COLLECTED IN SIM??
 move_temp <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
   mutate(sp = str_c("SP", sp, sep = " "),
          ID = as_factor(ID),
          U_ID = str_c(sp, ID, sep="_"))
-move_hist <- bind_rows(move_temp, move_hist)          #adds each gen rep to each other #IS THIS THE PROBLEM HERE - ARE WE MERGING WEIRDLY?
+move_hist <- bind_rows(move_temp, move_hist)          #adds each ts rep to each other #IS THIS THE PROBLEM HERE - ARE WE MERGING WEIRDLY?
 
 #save fight data 
 
@@ -483,9 +503,9 @@ close(pb)
 
 #exploring model output
 
-#number of individuals per gen & rep
+#number of individuals per ts & rep
 hist_sp <- move_hist %>% 
-  group_by(gen, repl) %>% 
+  group_by(ts, repl) %>% 
   dplyr::summarise(n.inds=length(unique(U_ID)),
                    n.sp = length(unique(sp)))
 
@@ -516,14 +536,14 @@ sub_movers <- subset(move_hist, U_ID %in% c(random_select))
             ) +
   # theme_dark()+
   theme(legend.position="none")+
- # labs(title = "Generation {previous_state} of 20" )+
+ # labs(title = "timestep {previous_state} of 20" )+
   coord_fixed())
 
 
 # Sp. Abundance ----
 sp_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   mutate(sp = str_c("SP", sp)) %>% 
-  group_by(gen, sp) %>% 
+  group_by(ts, sp) %>% 
   summarise(mean_abund = mean(n),
             SEM_abund = sd(n)/sqrt(length(n)),
             reps = length(n))
@@ -532,8 +552,8 @@ sp_hist_n <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   mutate(sp = str_c("SP", sp)) 
 
 #+ abundance.plot
-sp_fig <- ggplot( data = sp_hist, aes(x=gen, y=mean_abund, color=sp)) +
- geom_line(data = sp_hist_n, aes(x=gen, y=n, group=sp), colour="gray", alpha = 0.4)+
+sp_fig <- ggplot( data = sp_hist, aes(x=ts, y=mean_abund, color=sp)) +
+ geom_line(data = sp_hist_n, aes(x=ts, y=n, group=sp), colour="gray", alpha = 0.4)+
   #species specific abundance
   geom_line() +
   ggtitle('Species abundance')+
@@ -566,11 +586,11 @@ ggsave("test2.png")
 #' mean should probbaly not be mean abundance, but mean species per bin?
 
 library(sads)
-SAD_data <- as_tibble(subset(sp_hist, gen==ngenerations)) #extract final species (but as mean??)
+SAD_data <- as_tibble(subset(sp_hist, ts==n.timestep)) #extract final species (but as mean??)
 
-#plotting SAD using final gen & final rep
+#plotting SAD using final ts & final rep
 SAD_data <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
-  filter(gen==ngenerations, rep == replicates) %>% #  keeps final gen final rep , but figure out how to deal with a mean instead
+  filter(ts==n.timestep, rep == replicates) %>% #  keeps final ts final rep , but figure out how to deal with a mean instead
   select(sp,n)
 SAD_data_rep <- as.numeric(with(SAD_data, rep(sp,n))) #make into format for octav()
 SAD_octave <- octav(SAD_data_rep)
@@ -579,10 +599,9 @@ plot(SAD_octave)
 
 #' Using mean instead
 SAD_mean <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
- filter(gen==ngenerations) %>% #  keeps final gen 
-  group_by(sp, gen) %>% 
-  summarise(n = mean(n)) %>% 
-  pull(n)
+ filter(ts==20) %>% #  keeps final ts 
+  group_by(sp, ts) %>% 
+  summarise(n = mean(n)) 
 
 SAD_octave <- octav(SAD_mean)
 
@@ -623,16 +642,16 @@ SAD_fig
 #' as a ridgeline plot
 
 library(ggridges)
-gen_filter <- c(1, seq(from = 10, to=ngenerations, by = 10))
+ts_filter <- c(1, seq(from = 10, to=n.timestep, by = 10))
   
 SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
-  group_by(sp, gen) %>% 
+  group_by(sp, ts) %>% 
   summarise(n = mean(n)) %>% 
-  mutate(gen=as.factor(gen)) %>% 
-  filter(gen%in%gen_filter)
+  mutate(ts=as.factor(ts)) %>% 
+  filter(ts%in%ts_filter)
 
 #+ SAD.ridge.plot
-(SAD_ridge_plot <- ggplot(data = SAD_mean_ridge, aes(x=log(n), y=fct_rev(gen), fill = gen))+
+(SAD_ridge_plot <- ggplot(data = SAD_mean_ridge, aes(x=log(n), y=fct_rev(ts), fill = ts))+
   geom_density_ridges(color="white")+
   theme_ridges()+
   theme(legend.position = "none",
@@ -645,21 +664,27 @@ SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist s
         axis.ticks = element_line(colour = "white"),
         axis.title = element_text(colour = "white", size = 16, family = "Arial"),
         plot.title = element_text(colour = "white"))+
+    scale_x_continuous(limits = c(-1.5, 5), expand=c(0,0))+
   labs(x="log(Mean abundance)", y = "Time Step"))
+
+
+  
 ggsave( "test4.png", bg = 'transparent')
+
+
 # Sp. Diversity ----
 sp_div_hist <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   mutate(sp = str_c("SP", sp)) %>% 
-  group_by(rep, gen) %>% 
+  group_by(rep, ts) %>% 
   tally() %>% 
-  group_by(gen) %>% 
+  group_by(ts) %>% 
   summarise(mean_n=mean(n),
             SEM_n=sd(n)/sqrt(length(n)),
             max_n=max(n),
             min_n=min(n))
 
 #+ sp.div.plot
-div_fig <- ggplot(data=sp_div_hist, aes(x=gen,y=mean_n)) +
+div_fig <- ggplot(data=sp_div_hist, aes(x=ts,y=mean_n)) +
   geom_ribbon(aes(ymin=mean_n-SEM_n, ymax=mean_n+SEM_n), fill = "#35B779",  alpha = 0.6)+
   geom_line(colour = "#35B779") +
   theme_classic()+
@@ -676,33 +701,33 @@ div_fig <- ggplot(data=sp_div_hist, aes(x=gen,y=mean_n)) +
         axis.title = element_text(colour = "white", size = 16, family = "Arial"),
         plot.title = element_text(colour = "white"))+
   scale_y_continuous(limits = c(0, nspecies), expand=c(0,0)) +
-  scale_x_continuous(limits = c(0, ngenerations), expand=c(0,0))
+  scale_x_continuous(limits = c(0, n.timestep), expand=c(0,0))
 
 div_fig
 
 # # Energy ----
 e_data <- move_hist %>%                                       # calculating mean/se e-level
-  group_by(repl, gen, sp) %>%
+  group_by(repl, ts, sp) %>%
   summarise(e_avg = mean(e_val),
             e_sem = sd(e_val)/sqrt(length(e_val)))
 
 e_trend <- move_hist %>%
-  group_by(gen) %>%
+  group_by(ts) %>%
   summarise(e_avg = mean(e_val),
             e_sem = sd(e_val)/sqrt(length(e_val)))
 
 #+ energy.plot
-e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
+e_fig <- ggplot(e_data, aes(x=ts, y=e_avg, colour=sp))+
   geom_line()+
   scale_colour_viridis(option="viridis", discrete = TRUE) +
   geom_line( data = e_trend,
-             aes(x=gen,
+             aes(x=ts,
                  y=e_avg),
              colour="black",
              inherit.aes = FALSE)+
   ggtitle('E-levels (mean)')+
   ylab("Energy")+
-  xlab("Generation")+
+  xlab("timestep")+
   theme(panel.background = element_rect(fill='black'), 
         plot.background = element_rect(fill='black'),
         panel.grid.major = element_line(colour=NA),
@@ -718,16 +743,35 @@ e_fig <- ggplot(e_data, aes(x=gen, y=e_avg, colour=sp))+
   theme(legend.position = "none")
 e_fig
 ggsave('test3.png')
-# 
-# # Panel ----
-library(patchwork)
 
+#paramtre table
+params <- tibble(param = c("ts", "rep", "nspecies", "nindiv", "e.somatic", "-e.aggro", "-e.repro", "e_feed" ),
+                 value = c(n.timestep, replicates, nspecies, nindiv, eloss, fight_eloss, repro_pen, e_feed )) %>% 
+  
+param_tab <- mmtable(data = params, cells = value)+
+  header_top(param) 
+
+library(ggpmisc)
+
+
+
+
+
+# # Panel ----
+
+df <-  tibble(x=5, y=0.5, value = list(params))
+
+(SAD_ridge_table <- SAD_ridge_plot +
+    geom_table(data = df, aes(x = x, y = y, label= value), 
+               table.theme = ttheme_gtdark))  
+ 
 #+ panel.plot
 history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
-history_panel <- history_4 / (SAD_ridge_plot)+
-  plot_layout(heights = c(1,1,2))
 
-ggsave('model_output_7mar.png', bg = 'transparent')
+(history_panel <- history_4 / ( SAD_ridge_table)+
+  plot_layout(heights = c(1,1,2)))
+
+ggsave('model_output_8mar.png', bg = 'transparent')
 
 
 # history_panel  <-   ((sp_fig | SAD_fig) +
@@ -741,13 +785,13 @@ ggsave('model_output_7mar.png', bg = 'transparent')
 
 # Animate ----
 # movement_animation <- movement_fig +
-#   transition_reveal(gen) +
-#   labs(title = "Time step (gen) {as.integer(frame_along)} of 100")
+#   transition_reveal(ts) +
+#   labs(title = "Time step (ts) {as.integer(frame_along)} of 100")
 # move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
 # anim_save(filename="move_anim.gif")
 
 # sp_abund_animation <- sp_fig + 
-#   transition_reveal(gen) 
+#   transition_reveal(ts) 
 # abund_gif <- animate(movement_animation, end_pause = 3, width=400, height=400)
 # # anim_save(filename="move_anim.gif")
 # 

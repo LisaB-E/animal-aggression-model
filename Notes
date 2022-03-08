@@ -5,10 +5,7 @@
  1.  Order of things... multiple feeding events - doesn't make sense 
     keep habitat the same  in each
     change to binary - food resource or not, clumped vs not, feeding only when succesfyl comp
-    
- 2.  Option to not move - even if not habitat related?
-    move in four directions - completely random
-    read up on edge stuff more
+
  3. Intra vs inter?
     comp is random across everyone
     transient vs intransient
@@ -27,9 +24,7 @@ given this theory ating on indiv scale, ability to scale up to community levels
 
 
 NEW:
-Simulation:
-- why replicates? to be able to generate rror around oredictions withi each generation?
-    - if so, should habitat be ew per each new replicate?
+
 
 Move:    
 - a single movement step per generation? is that realistic? does it matter?
@@ -56,5 +51,5 @@ Meeting November '21
 - ration of energies, feed vs fight vs aggresion vs repordutcon etc --> energy budgets!
 - repro should be limited for low energy individuals...
 - moving should have cost too?
-- 
+- figure out saving subset of data t avoid bloat
 
