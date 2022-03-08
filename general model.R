@@ -391,11 +391,6 @@ fight <- function(){
   locs_new[locs_new[,4]>100,4] = 100                                     # e > 100 = 100
   locs_new = locs_new[locs_new[,4]>0,]                                   # e < 0 = dead
   
-# Death 
-  mort = as.logical(rbinom(dim(locs_new)[1],1,a/
-                             (1+b*exp(-v*locs_new[,4]))))                # Death = Bernoulli trial w probability logistically dependent on current energy
-  locs_new = locs_new[mort,]
-  
   locs_new = rbind(locs_new[,1:5],losers[,1:5])          # Combines all after fight, feed, death
   locs_new = locs_new[order(locs_new[,1]),]
 
@@ -426,6 +421,22 @@ ts <- rep(timestep, nrow(locs_new))
 # Store ts (WARNING - change 1 to timestep, replic)
 repl <- rep(replic, nrow(locs_new))
 locs_new <- cbind(locs_new, ts,repl)  
+return(locs_new)
+}
+
+
+
+# Death 
+die <- function(){
+mort = as.logical(rbinom(dim(locs_new)[1],1,a/
+                           (1+b*exp(-v*locs_new[,4]))))                # Death = Bernoulli trial w probability logistically dependent on current energy
+locs_new = locs_new[mort,]
+# save data
+ts <- rep(timestep, nrow(locs_new))
+# Store ts (WARNING - change 1 to timestep, replic)
+repl <- rep(replic, nrow(locs_new))
+locs_new <- cbind(locs_new, ts,repl)  
+
 return(locs_new)
 }
 
@@ -461,14 +472,23 @@ for(timestep in 1:n.timestep){
   locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
   IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available IS THIS HAPPENIGN TWICE, IS THAT WHY WE RUN OUT OF INDS?
 
-# *reproduction * 
+# *reproduction *                             # happens less than moving and fighting (3 times a year)
   day=day+1
   day.yr=day-(365*floor(day/365))
-  while (day.yr==(5*30) ||day.yr==(6*30) || day.yr==(6*30)) {#may=5, june=6, july=7
+  while (day.yr==(5*30) ||day.yr==(6*30) || day.yr==(6*30)) { #may=5, june=6, july=7 single reproduction days
   after_repr <- reproduct()
   locs <- after_repr[,1:5]                   # updates locs to endpoint (final timestep) 
   IDs <- setdiff(IDs,locs[,5])     
   }
+  
+# *regular death *   
+  day = 0
+  day = day+1
+  while (day%%7==0) {                          # regular death happens once a week
+  after_death <- die()
+  locs <- after_death[,1:5]                   # updates locs to endpoint (final timestep) 
+  }
+    
   rich <- length(unique(locs[,2]))            # No species
   list_rich[[ts_rep]] <- rich
  
@@ -664,7 +684,7 @@ SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist s
         axis.ticks = element_line(colour = "white"),
         axis.title = element_text(colour = "white", size = 16, family = "Arial"),
         plot.title = element_text(colour = "white"))+
-    scale_x_continuous(limits = c(-1.5, 5), expand=c(0,0))+
+    scale_x_continuous(expand=c(0,0))+
   labs(x="log(Mean abundance)", y = "Time Step"))
 
 
@@ -746,7 +766,7 @@ ggsave('test3.png')
 
 #paramtre table
 params <- tibble(param = c("ts", "rep", "nspecies", "nindiv", "e.somatic", "-e.aggro", "-e.repro", "e_feed" ),
-                 value = c(n.timestep, replicates, nspecies, nindiv, eloss, fight_eloss, repro_pen, e_feed )) %>% 
+                 value = c(n.timestep, replicates, nspecies, nindiv, eloss, fight_eloss, repro_pen, e_feed )) 
   
 param_tab <- mmtable(data = params, cells = value)+
   header_top(param) 
@@ -759,7 +779,7 @@ library(ggpmisc)
 
 # # Panel ----
 
-df <-  tibble(x=5, y=0.5, value = list(params))
+df <-  tibble(x=4, y=0.5, value = list(params))
 
 (SAD_ridge_table <- SAD_ridge_plot +
     geom_table(data = df, aes(x = x, y = y, label= value), 
