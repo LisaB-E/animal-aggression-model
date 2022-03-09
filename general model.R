@@ -88,6 +88,7 @@ IDs <- c(1:(nspecies*nindiv*n.timestep*replicates)) #does it matter if this is u
 
 #' # 3. Initialise - habitat  
 
+init <- function(){
 #' Simulate habitat 
   hab_grid = expand.grid(1:dim, 1:dim)                                     # The habitat arena
   names(hab_grid) = c('x','y')
@@ -121,12 +122,12 @@ locs = cbind(locs,rep(100,nindiv))                                        # star
 locs = locs[order(locs[,1]),] 
 
 locs <- cbind(locs, IDs[1:nrow(locs)])
-IDs <- setdiff(IDs,locs[,5])
+IDs <- setdiff(IDs,locs[,5])                                              # remove starting individuals from list
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
 
-OG_locs <- locs                                                           # each rep in sim starts with same initialised habitat 
-
-
+init_list <- list("locs"=locs,"hab_bin"=hab_bin,"IDs"=IDs)
+return(init_list)
+}
 
 #+ echo=F
 #----- 4. FUNCTIONS ---------------------------------------------------------  
@@ -443,18 +444,21 @@ return(locs_new)
 #----- 5. SIMULATE -----------------------------------------------------------------  
 #' # 5. Simulate
 #+ results = 'hide'
-loop=0
 list_move=list()                                                      
 list_fight=list()
 list_abund=list()
 list_rich = list()
 move_hist = tibble()
-
-
+loop=0
 # start replication loop
 for (replic in 1:replicates) { 
-locs <- OG_locs #reset to starting point - is this right level of replication?
-day = 0
+  day = 0
+  #initialise new habitat & new individuals for each rep
+  after_init <- init()
+  locs <- after_init$locs
+  hab_bin <- after_init$hab_bin
+  IDs <- after_init$IDs
+  
 # start timestep loop
 for(timestep in 1:n.timestep){
   loop = loop + 1
@@ -488,7 +492,8 @@ for(timestep in 1:n.timestep){
   after_death <- die()
   locs <- after_death[,1:5]                   # updates locs to endpoint (final timestep) 
   }
-    
+  
+  #save data from each ts  
   rich <- length(unique(locs[,2]))            # No species
   list_rich[[ts_rep]] <- rich
  
@@ -498,28 +503,18 @@ for(timestep in 1:n.timestep){
     group_by(sp) %>%
     tally() %>%
     mutate(ts = timestep,
-           rep = replic)#;
-  list_abund[[ts_rep]] <- abund           # stores abundance after fight per timestep as list (move down)
- 
-   #SOMETHING IS WRONG HERE -- THE FINAL LIST IS CUT DOWN TO ONLY THOSE SPECIES REMAINING AT ts 100...
+           rep = replic)
   
+  list_abund[[ts_rep]] <- abund           # stores abundance after fight per timestep as list (move down)
   list_fight[[ts_rep]] <- after_fight     # stores outcomes from fights per timestep as list
   
   setTxtProgressBar(pb, loop)
    }                                          # end ts
-
-#save move data #WHY IS THIS ONE THE ONLY ONE THAT GETS COLLECTED IN SIM??
-move_temp <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
-  mutate(sp = str_c("SP", sp, sep = " "),
-         ID = as_factor(ID),
-         U_ID = str_c(sp, ID, sep="_"))
-move_hist <- bind_rows(move_temp, move_hist)          #adds each ts rep to each other #IS THIS THE PROBLEM HERE - ARE WE MERGING WEIRDLY?
-
-#save fight data 
-
-
 }                                             # end rep
 close(pb)
+
+
+
 
 #exploring model output
 
@@ -535,16 +530,25 @@ hist_sp <- move_hist %>%
 #can get rid of U_ID?
 
 # Movement ----
-random_select = sample(x=move_hist$U_ID,size=100)                               # reduced set for plotting n individs
-sub_movers <- subset(move_hist, U_ID %in% c(random_select))
+#extract move data from sim list
+move_hist <- data.frame(do.call(rbind,list_move)) %>% #unnest nested list
+  mutate(sp = str_c("SP", sp, sep = " "),
+         ID = as_factor(ID),
+         U_ID = str_c(sp, ID, sep="_"))
+
+#reduced set for visualisations
+sub_movers <- move_hist %>% 
+  filter(repl == sample(x = repl, size = 1)) %>%                                 # filter to single rep
+  filter(U_ID %in% sample(x = U_ID, size = 50))                                     # filter to n individs
+
 
 #+ movement.plot
 (movement_fig <- ggplot(data=hab_bin, aes(x=x,y=y)) +
   geom_raster(aes(fill=hab_bin), alpha=0.7) +
   scale_fill_gradient( low="grey10", high="grey5") +
-  geom_point(data=sub_movers, aes(x=col, y=row, col=sp),size=2, inherit.aes = FALSE)+
+   geom_point(data=sub_movers, aes(x=col, y=row, col=U_ID),size=2, inherit.aes = FALSE)+
   scale_colour_viridis(option="viridis", discrete = TRUE)+
-  geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
+   geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
   ggtitle('Individual movement')+
   theme_dark()+
   theme(title = element_text(colour = "white"),
@@ -779,7 +783,7 @@ library(ggpmisc)
 
 # # Panel ----
 
-df <-  tibble(x=4, y=0.5, value = list(params))
+df <-  tibble(x=5, y=0.5, value = list(params))
 
 (SAD_ridge_table <- SAD_ridge_plot +
     geom_table(data = df, aes(x = x, y = y, label= value), 
@@ -803,12 +807,13 @@ ggsave('model_output_8mar.png', bg = 'transparent')
 #   plot_annotation(tag_levels = 'a')
 # history_panel
 
-# Animate ----
-# movement_animation <- movement_fig +
-#   transition_reveal(ts) +
-#   labs(title = "Time step (ts) {as.integer(frame_along)} of 100")
-# move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800)
-# anim_save(filename="move_anim.gif")
+#Animate ----
+movement_animation <- movement_fig +
+  transition_reveal(ts) +
+  labs(title = "Time step (ts) {as.integer(frame_along)} of 100")
+(move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800))
+
+anim_save(filename="move_anim.gif")
 
 # sp_abund_animation <- sp_fig + 
 #   transition_reveal(ts) 
