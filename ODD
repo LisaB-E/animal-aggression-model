@@ -55,7 +55,11 @@
 
 1 - habitat is binary and random
 2 - movement is random in all directions
-3 - all species have the same comp ability
+3 - all species have the same comp ability (m1)
 4 - pop is NOT food limited (consumption does not change hab value)
+5 - spawning once per month, over 3 month period (May, June, July) Pratchett, M. S., Berumen, M. L., & Kapoor, B. G. (2013). Social structures and spawning behaviour of Chaetodon butterflyfishes. In Biology of Butterflyfishes (pp. 200–225). CRC Press.
+6 - fihs are solitary and react to any fish in the same cell
+
+
 
 

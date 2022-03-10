@@ -29,7 +29,7 @@ load.pack
 #' IBM Parameters *should include constraints on each parametre*. Double check how many are needed in reduced model
 
 #simulation
-n.timestep  = 100    # No. timesteps
+n.timestep    = 365    # No. timesteps
 replicates    = 5     # No. replicates (first half trans. second half intrans.)
 
 #initialisation
@@ -125,7 +125,7 @@ locs <- cbind(locs, IDs[1:nrow(locs)])
 IDs <- setdiff(IDs,locs[,5])                                              # remove starting individuals from list
 colnames(locs)=c("loc", "sp", "hab_val", "e_val", "ID")
 
-init_list <- list("locs"=locs,"hab_bin"=hab_bin,"IDs"=IDs)
+init_list <- list("locs"=locs,"hab_bin"=hab_bin,"IDs"=IDs, "hab_vals" = hab_vals)
 return(init_list)
 }
 
@@ -259,9 +259,9 @@ locs_new[,1] = locs_new[,1] + locs_new[,6]                            # add move
 locs_new[,3] = hab_vals[locs_new[,1]]                                 # get hab vals for new cells
 locs_new = locs_new[order(locs_new[,1]),]  
 
-ts <- rep(timestep, nrow(locs_new))                                # output cleanup 
+ts <- rep(timestep, nrow(locs_new))                                   # output cleanup 
 repl <- rep(replic, nrow(locs_new)) 
-locs_new <- cbind(locs_new, ts, repl)                                # add timestep number V6, repl V7
+locs_new <- cbind(locs_new, ts, repl)                                 # add timestep number V6, repl V7
 
 # Getting x & y coords for animation
 temp_habitat1 <- matrix(0,ncol=dim,nrow=dim)                          # make 100 x 100 matrix
@@ -305,6 +305,8 @@ fight <- function(){
   fighters <- locs_new[locs_new[,1]%in%int_loc,]                       # extracts values for fighters
 
   locs_new = locs_new[locs_new[,1]%in%setdiff(locs_new[,1],fighters[,1]),]             # Remove fighters from set of individuals            #BEWARE!!! if dplyr is loaded - changes results! hould chekc this forst! NEED to fix
+  
+  #Feed
   
   fighters[,4] = fighters[,4]-fight_eloss                              # Aggression is energetically expensive
   # *DOES THIS MAKE SENSE? IT'S ASSUMING THEY MAKE THIS DECISION AHEAD OF TIME, I WILL OR WILL NOT ENGAGE IN  AGGRESISON BASED ON ENERGY LEVELS, OR SHOULD THIS BE AFTER??*
@@ -388,11 +390,12 @@ fight <- function(){
   
   locs_new = locs_new[order(locs_new[,1]),]
   
-  locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*100                     # winners -e from engaging? +e by feeding. Check whetehr this doesn't already occur up top?
+  #feeding                                                               # winners & no engaged get to feed 
+  locs_new[,4] = locs_new[,4]-eloss+locs_new[,3]*e_feed                     # winners -e from engaging? +e by feeding. Check whetehr this doesn't already occur up top?
   locs_new[locs_new[,4]>100,4] = 100                                     # e > 100 = 100
   locs_new = locs_new[locs_new[,4]>0,]                                   # e < 0 = dead
   
-  locs_new = rbind(locs_new[,1:5],losers[,1:5])          # Combines all after fight, feed, death
+  locs_new = rbind(locs_new[,1:5],losers[,1:5])                          # Combines all after fight, feed, death
   locs_new = locs_new[order(locs_new[,1]),]
 
 # save data
@@ -458,6 +461,7 @@ for (replic in 1:replicates) {
   locs <- after_init$locs
   hab_bin <- after_init$hab_bin
   IDs <- after_init$IDs
+  hab_vals <- after_init$hab_vals
   
 # start timestep loop
 for(timestep in 1:n.timestep){
@@ -473,8 +477,7 @@ for(timestep in 1:n.timestep){
 # *Fight*
   after_fight <- fight()                      # after_fight = locs_new
 # print(paste('fight_','ts', timestep, ', rep', replic, ' DONE', sep = ""))
-  locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) #IS THIS THE PROBLEM?!
-  IDs <- setdiff(IDs,locs[,5])                # removes IDs from pool of available IS THIS HAPPENIGN TWICE, IS THAT WHY WE RUN OUT OF INDS?
+  locs <- after_fight[,1:5]                   # updates locs to endpoint (final timestep) 
 
 # *reproduction *                             # happens less than moving and fighting (3 times a year)
   day=day+1
@@ -601,7 +604,7 @@ sp_fig <- ggplot( data = sp_hist, aes(x=ts, y=mean_abund, color=sp)) +
 
 #' *all species persist here because over the replicates, there's always at least 2 runs where each species survives 'til the bitter end, even though it's extinct in most other runs.*
 sp_fig
-ggsave("test2.png")
+
 
 # SAD ----------
 # (contd'd) from above
@@ -666,7 +669,7 @@ SAD_fig
 #' as a ridgeline plot
 
 library(ggridges)
-ts_filter <- c(1, seq(from = 10, to=n.timestep, by = 10))
+ts_filter <- c(1, seq(from = 30, to=n.timestep, by = 30))
   
 SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist sim
   group_by(sp, ts) %>% 
@@ -690,10 +693,6 @@ SAD_mean_ridge <- as_tibble(data.frame(do.call(rbind,list_abund))) %>% #unlist s
         plot.title = element_text(colour = "white"))+
     scale_x_continuous(expand=c(0,0))+
   labs(x="log(Mean abundance)", y = "Time Step"))
-
-
-  
-ggsave( "test4.png", bg = 'transparent')
 
 
 # Sp. Diversity ----
@@ -766,7 +765,6 @@ e_fig <- ggplot(e_data, aes(x=ts, y=e_avg, colour=sp))+
   scale_x_continuous(expand=c(0,0)) +
   theme(legend.position = "none")
 e_fig
-ggsave('test3.png')
 
 #paramtre table
 params <- tibble(param = c("ts", "rep", "nspecies", "nindiv", "e.somatic", "-e.aggro", "-e.repro", "e_feed" ),
@@ -776,9 +774,6 @@ param_tab <- mmtable(data = params, cells = value)+
   header_top(param) 
 
 library(ggpmisc)
-
-
-
 
 
 # # Panel ----
@@ -795,7 +790,7 @@ history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
 (history_panel <- history_4 / ( SAD_ridge_table)+
   plot_layout(heights = c(1,1,2)))
 
-ggsave('model_output_8mar.png', bg = 'transparent')
+ggsave('./model_output_9mar.png', bg = 'transparent')
 
 
 # history_panel  <-   ((sp_fig | SAD_fig) +
@@ -813,7 +808,7 @@ movement_animation <- movement_fig +
   labs(title = "Time step (ts) {as.integer(frame_along)} of 100")
 (move_gif <- animate(movement_animation, end_pause = 3, width=800, height=800))
 
-anim_save(filename="move_anim.gif")
+#anim_save(filename="move_anim.gif")
 
 # sp_abund_animation <- sp_fig + 
 #   transition_reveal(ts) 
