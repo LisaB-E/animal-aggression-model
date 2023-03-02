@@ -551,14 +551,14 @@ sub_movers <- move_hist %>%
   scale_fill_gradient( low="grey10", high="grey5") +
    geom_point(data=sub_movers, aes(x=col, y=row, col=U_ID),size=2, inherit.aes = FALSE)+
   scale_colour_viridis(option="viridis", discrete = TRUE)+
-   geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),size=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
+   geom_path(data=sub_movers, aes(x=col, y=row, col=U_ID),linewidth=1.5, lineend = "round", inherit.aes = FALSE, alpha = 0.8)+
   ggtitle('Individual movement')+
   theme_dark()+
   theme(title = element_text(colour = "white"),
         plot.background = element_rect(fill = "grey10"),
         panel.background = element_blank(),
-        panel.grid.major = element_line(color = "grey20", size = 0.2),
-        panel.grid.minor = element_line(color = "grey20", size = 0.2),
+        panel.grid.major = element_line(color = "grey20", linewidth = 0.2),
+        panel.grid.minor = element_line(color = "grey20", linewidth = 0.2),
         axis.title = element_text(colour="grey30")
             ) +
   # theme_dark()+
@@ -790,7 +790,7 @@ history_4  <-  (sp_fig | div_fig)/( SAD_fig| e_fig)
 (history_panel <- history_4 / ( SAD_ridge_table)+
   plot_layout(heights = c(1,1,2)))
 
-ggsave('./model_output_9mar.png', bg = 'transparent')
+ ggsave('./model_output_9mar.png', bg = 'transparent')
 
 
 # history_panel  <-   ((sp_fig | SAD_fig) +
